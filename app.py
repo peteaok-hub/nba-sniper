@@ -8,13 +8,13 @@ import unicodedata
 from datetime import datetime
 import pytz 
 from nba_api.stats.static import teams as nba_teams_static
-from nba_api.stats.endpoints import commonteamroster, playergamelog, leaguedashteamstats, scoreboardv2, leaguedashplayerstats
+from nba_api.stats.endpoints import commonteamroster, playergamelog, leaguedashteamstats, scoreboardv2, leaguedashplayerstats, commonallplayers
 from bs4 import BeautifulSoup
 from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V3.1", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V3.2", layout="wide", page_icon="🏀")
 
 # --- STEALTH HEADERS ---
 custom_headers = {
@@ -173,6 +173,7 @@ def get_player_props(game_id, player_name):
                     elif key == 'player_assists': p_type = 'AST'
                     if p_type and not props[p_type]:
                         for outcome in market['outcomes']:
+                            # Simple fuzzy match
                             if outcome['description'].split()[-1] in player_name: 
                                 props[p_type] = outcome['point']
                                 break
@@ -250,23 +251,31 @@ def get_defense_rankings():
         return df[['TEAM_NAME', 'TEAM_ID', 'PTS_RANK', '3PM_RANK']]
     except: return pd.DataFrame()
 
-# --- ROSTER FUNCTION (BACKDOOR STRATEGY) ---
+# --- ROSTER FUNCTION (NUCLEAR ATOMIC FIX) ---
 @st.cache_data(ttl=3600)
 def get_roster(team_id):
-    """Tries standard roster, then falls back to stats endpoint."""
-    # Method 1: CommonTeamRoster (Official)
+    """Atomic Roster Fetch: Multi-Layer Fallback System."""
+    # Layer 1: CommonTeamRoster (Official - Specific Season)
     try:
-        roster = commonteamroster.CommonTeamRoster(team_id=team_id, season='2024-25', headers=custom_headers, timeout=5)
+        roster = commonteamroster.CommonTeamRoster(team_id=team_id, season='2024-25', headers=custom_headers, timeout=3)
         return roster.get_data_frames()[0]
     except: pass
     
-    # Method 2: LeagueDashPlayerStats (Backdoor)
+    # Layer 2: LeagueDashPlayerStats (Backdoor)
     try:
-        # This endpoint returns all players, filter by team_id
-        stats = leaguedashplayerstats.LeagueDashPlayerStats(team_id_nullable=team_id, season='2024-25', headers=custom_headers, timeout=10)
+        stats = leaguedashplayerstats.LeagueDashPlayerStats(team_id_nullable=team_id, season='2024-25', headers=custom_headers, timeout=5)
         df = stats.get_data_frames()[0]
-        # Standardize columns
-        df = df.rename(columns={'PLAYER_NAME': 'PLAYER'})
+        df = df.rename(columns={'PLAYER_NAME': 'PLAYER', 'PLAYER_ID': 'PLAYER_ID'})
+        return df
+    except: pass
+
+    # Layer 3: CommonAllPlayers (The "Nuclear" Option - gets everyone, filters locally)
+    try:
+        cap = commonallplayers.CommonAllPlayers(is_only_current_season=1, headers=custom_headers, timeout=10)
+        df = cap.get_data_frames()[0]
+        # Filter by Team ID
+        df = df[df['TEAM_ID'] == team_id]
+        df = df.rename(columns={'DISPLAY_FIRST_LAST': 'PLAYER', 'PERSON_ID': 'PLAYER_ID'})
         return df
     except: pass
     
@@ -282,7 +291,7 @@ def fetch_player_logs(player_id):
     except: return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V3.1")
+st.title("🏀 NBA JUGGERNAUT V3.2")
 
 tab1, tab2 = st.tabs(["🏆 Game Predictor", "📊 Player Prop Sniper"])
 
