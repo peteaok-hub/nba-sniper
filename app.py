@@ -1,9 +1,20 @@
 import streamlit as st
 import pandas as pd
 import nba_brain as brain # Imports the Engine
+import time
 
 # --- CONFIGURATION ---
 st.set_page_config(page_title="NBA Sniper V4.0", layout="wide", page_icon="🏀")
+
+# --- STYLES ---
+st.markdown("""
+<style>
+    .stApp { background-color: #0e1117; color: white; }
+    .stat-card { background: #1f2937; padding: 15px; border-radius: 10px; text-align: center; border: 1px solid #374151; }
+    .positive { color: #4ade80; font-weight: bold; }
+    .negative { color: #f87171; font-weight: bold; }
+</style>
+""", unsafe_allow_html=True)
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -17,7 +28,7 @@ with st.sidebar:
     st.info("System Online: Autonomous Mode")
 
 # --- MAIN UI ---
-tab1, tab2 = st.tabs(["🏆 GAME PREDICTOR", "📊 PROP SNIPER"])
+tab1, tab2, tab3 = st.tabs(["🏆 GAME PREDICTOR", "📊 PROP SNIPER", "📜 WAR ROOM"])
 
 # ================= TAB 1: GAME PREDICTOR =================
 with tab1:
@@ -175,16 +186,25 @@ with tab2:
                         # Sniper Comparison
                         line = prop_lines.get(cat)
                         rec = ""
+                        decision = "NO PLAY"
                         if line:
                             diff = proj - line
-                            if diff > 1.5: rec = f"✅ OVER {line}"
-                            elif diff < -1.5: rec = f"✅ UNDER {line}"
+                            if diff > 1.5: 
+                                rec = f"✅ OVER {line}"
+                                decision = "OVER"
+                            elif diff < -1.5: 
+                                rec = f"✅ UNDER {line}"
+                                decision = "UNDER"
                             else: rec = f"⚪ NO EDGE ({line})"
                         else: rec = "⚠️ No Line"
                         
                         with cols[i]:
-                            st.metric(f"Proj {cat}", f"{proj:.1f}", delta=rec)
-                            
+                            st.markdown(f"<div class='stat-card'><h3>{cat}</h3><h1>{proj:.1f}</h1><p>{rec}</p></div>", unsafe_allow_html=True)
+                            if decision != "NO PLAY":
+                                if st.button(f"💾 Log {cat}", key=f"log_{cat}"):
+                                    brain.log_prediction(sel_player, cat, line, proj, decision, diff, "Sniper V4")
+                                    st.toast("✅ Saved!")
+
                     st.divider()
                     st.caption("Last 5 Games:")
                     st.dataframe(l5[['GAME_DATE', 'MATCHUP', 'PTS', 'REB', 'AST', 'MIN']].set_index('GAME_DATE'), use_container_width=True)
@@ -192,3 +212,12 @@ with tab2:
                 else: st.error("No game logs found.")
     else:
         st.warning("Could not fetch roster. Try 'Force Refresh' in sidebar.")
+
+# ================= TAB 3: WAR ROOM =================
+with tab3:
+    st.markdown("### 📜 Betting History")
+    if os.path.exists(brain.HISTORY_FILE):
+        df_hist = pd.read_csv(brain.HISTORY_FILE)
+        st.dataframe(df_hist, use_container_width=True)
+    else:
+        st.info("No bets logged yet.")
