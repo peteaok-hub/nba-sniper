@@ -9,9 +9,11 @@ from datetime import datetime
 from nba_api.stats.static import teams as nba_teams_static
 from nba_api.stats.endpoints import commonteamroster, playergamelog, leaguedashteamstats, scoreboardv2
 from bs4 import BeautifulSoup
+from sklearn.linear_model import RidgeClassifier
+from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V2.4", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V2.5", layout="wide", page_icon="🏀")
 
 # Custom headers to stop the NBA from blocking us
 custom_headers = {
@@ -29,17 +31,78 @@ custom_headers = {
 ODDS_API_KEY = "3e039d8cfd426d394b020b55bd303a07"
 ODDS_URL = "https://api.the-odds-api.com/v4/sports/basketball_nba/odds"
 
-# --- 1. EXISTING ML ENGINE (GAME WINNER) ---
+# --- INTERNAL BRAIN BUILDER (SELF-HEALING) ---
+def rebuild_brain():
+    """Rebuilds the ML model if files are missing."""
+    status = st.empty()
+    status.info("🧠 Brain not found. Initializing Self-Healing Protocol... (Downloading Data)")
+    
+    try:
+        # 1. Download Data
+        url = "https://drive.google.com/uc?export=download&id=1YyNpERG0jqPlpxZvvELaNcMHTiKVpfWe"
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with open("nba_games.csv", "wb") as f:
+            f.write(r.content)
+            
+        # 2. Process Data
+        status.info("⚙️ Processing Stats & Rolling Averages...")
+        df = pd.read_csv("nba_games.csv", parse_dates=["date"])
+        df = df.sort_values("date")
+        
+        code_map = {"NOH":"NOP", "CHO":"CHA", "BRK":"BKN", "PHO":"PHX"}
+        df.replace(code_map, inplace=True)
+        
+        cols_drop = ["mp.1", "mp_opp.1", "index_opp"]
+        df = df.drop(columns=[c for c in cols_drop if c in df.columns])
+        
+        df["target"] = df.groupby("team")["won"].shift(-1).fillna(0).astype(int)
+        
+        numeric = df.select_dtypes(include=[np.number])
+        cols = [c for c in numeric.columns if c not in ["season", "target", "won"]]
+        r10 = df.groupby("team")[cols].rolling(10, min_periods=1).mean().reset_index(0, drop=True)
+        r10.columns = [f"{c}_R10" for c in r10.columns]
+        
+        df = pd.concat([df, r10], axis=1).fillna(0)
+        df.to_csv("nba_games_rolled.csv", index=False)
+        
+        # 3. Train Model
+        status.info("💪 Training Neural Pathways...")
+        features = [c for c in df.columns if "_R10" in c]
+        X = df[features]
+        y = df["target"]
+        
+        scaler = StandardScaler()
+        X_sc = scaler.fit_transform(X)
+        
+        model = RidgeClassifier()
+        model.fit(X_sc, y)
+        
+        pkg = {"model": model, "scaler": scaler, "features": features}
+        with open("nba_brain.pkl", "wb") as f:
+            pickle.dump(pkg, f)
+            
+        status.success("✅ System Online. Brain Built Successfully.")
+        status.empty() # Clear message
+        return df, pkg
+        
+    except Exception as e:
+        st.error(f"Critical System Failure: {e}")
+        return None, None
+
+# --- 1. LOAD BRAIN ENGINE ---
 @st.cache_resource
 def load_brain():
+    # Check if brain exists, if not, build it
     if not os.path.exists("nba_games_rolled.csv") or not os.path.exists("nba_brain.pkl"):
-        st.warning("⚠️ ML Brain not found. Please run 'fix_brain.py' first.")
-        return None, None
+        return rebuild_brain()
     
-    df = pd.read_csv("nba_games_rolled.csv", parse_dates=["date"])
-    with open("nba_brain.pkl", "rb") as f:
-        pkg = pickle.load(f)
-    return df, pkg
+    try:
+        df = pd.read_csv("nba_games_rolled.csv", parse_dates=["date"])
+        with open("nba_brain.pkl", "rb") as f:
+            pkg = pickle.load(f)
+        return df, pkg
+    except:
+        return rebuild_brain()
 
 # --- 2. INTELLIGENCE MODULES ---
 
@@ -240,7 +303,7 @@ def fetch_player_logs(player_id):
         return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V2.4")
+st.title("🏀 NBA JUGGERNAUT V2.5")
 
 tab1, tab2 = st.tabs(["🏆 Game Predictor (Live Odds + Injuries)", "📊 Player Prop Sniper"])
 
