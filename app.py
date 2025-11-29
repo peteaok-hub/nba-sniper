@@ -14,9 +14,9 @@ from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V2.9", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V3.0", layout="wide", page_icon="🏀")
 
-# --- STEALTH HEADERS (Updated) ---
+# --- STEALTH HEADERS ---
 custom_headers = {
     'Host': 'stats.nba.com',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
@@ -29,7 +29,7 @@ custom_headers = {
 
 # ODDS API
 ODDS_API_KEY = "3e039d8cfd426d394b020b55bd303a07"
-ODDS_URL = "https://api.the-odds-api.com/v4/sports/basketball_nba/events" # Changed endpoint for props
+ODDS_BASE_URL = "https://api.the-odds-api.com/v4/sports/basketball_nba"
 
 # --- SIDEBAR CONTROLS ---
 with st.sidebar:
@@ -104,7 +104,7 @@ def get_todays_slate():
     slate = []
     # 1. Try Odds API
     try:
-        url = "https://api.the-odds-api.com/v4/sports/basketball_nba/odds"
+        url = f"{ODDS_BASE_URL}/odds"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
         r = requests.get(url, params=params)
         if r.status_code == 200:
@@ -135,22 +135,65 @@ def get_todays_slate():
 @st.cache_data(ttl=3600)
 def get_live_odds():
     try:
-        url = "https://api.the-odds-api.com/v4/sports/basketball_nba/odds"
+        url = f"{ODDS_BASE_URL}/odds"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
         response = requests.get(url, params=params)
         if response.status_code == 200: return response.json()
         return []
     except: return []
 
-# NEW: PROP ODDS FETCH
+# --- NEW: PROP SNIPER ENGINE ---
 @st.cache_data(ttl=3600)
-def get_prop_odds(game_id, prop_type):
-    # This feature requires paid Odds API plan for "event" specific props usually, 
-    # but we can try fetching the general props endpoint if available or mock the structure for V2.9
-    # For now, we will return a placeholder or implement basic if key allows.
-    # Note: Free keys often don't support player props. 
-    # We will simulate the logic structure so it's ready for a Pro Key.
-    return None 
+def get_game_id_for_team(team_name):
+    """Finds the Odds API Game ID for a specific team."""
+    try:
+        url = f"{ODDS_BASE_URL}/events"
+        params = {'apiKey': ODDS_API_KEY}
+        r = requests.get(url, params=params)
+        if r.status_code == 200:
+            for game in r.json():
+                if team_name in game['home_team'] or team_name in game['away_team']:
+                    return game['id']
+    except: pass
+    return None
+
+@st.cache_data(ttl=300) # Short cache for live props
+def get_player_props(game_id, player_name):
+    """Fetches Points, Rebounds, Assists lines for a player."""
+    props = {'PTS': None, 'REB': None, 'AST': None}
+    if not game_id: return props
+    
+    try:
+        url = f"{ODDS_BASE_URL}/events/{game_id}/odds"
+        # Requesting player props markets
+        params = {
+            'apiKey': ODDS_API_KEY,
+            'regions': 'us',
+            'markets': 'player_points,player_rebounds,player_assists',
+            'oddsFormat': 'american'
+        }
+        r = requests.get(url, params=params)
+        if r.status_code != 200: return props
+        
+        data = r.json()
+        # Parse bookmakers
+        for book in data.get('bookmakers', []):
+            for market in book.get('markets', []):
+                key = market['key']
+                # Determine prop type
+                p_type = None
+                if key == 'player_points': p_type = 'PTS'
+                elif key == 'player_rebounds': p_type = 'REB'
+                elif key == 'player_assists': p_type = 'AST'
+                
+                if p_type and not props[p_type]: # Get first available line
+                    for outcome in market['outcomes']:
+                        # Fuzzy match player name (e.g. "L. James" vs "LeBron James")
+                        if outcome['description'].split()[-1] in player_name: 
+                            props[p_type] = outcome['point']
+                            break
+    except: pass
+    return props
 
 # --- INJURY GUARD ---
 def normalize_cbs_name(cbs_name):
@@ -223,22 +266,18 @@ def get_defense_rankings():
         return df[['TEAM_NAME', 'TEAM_ID', 'PTS_RANK', '3PM_RANK']]
     except: return pd.DataFrame()
 
-# --- AGGRESSIVE ROSTER FETCH (FIXED) ---
+# --- FIXED ROSTER FUNCTION ---
 @st.cache_data(ttl=3600)
 def get_roster(team_id):
     """Tries multiple methods to bypass cloud blocks."""
-    # 1. Try default (no season param often works best on cloud)
     try:
         roster = commonteamroster.CommonTeamRoster(team_id=team_id, headers=custom_headers, timeout=5)
         return roster.get_data_frames()[0]
     except: pass
-    
-    # 2. Try explicit season
     try:
         roster = commonteamroster.CommonTeamRoster(team_id=team_id, season='2024-25', headers=custom_headers, timeout=5)
         return roster.get_data_frames()[0]
     except: pass
-    
     return pd.DataFrame()
 
 def fetch_player_logs(player_id):
@@ -251,9 +290,9 @@ def fetch_player_logs(player_id):
     except: return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V2.9")
+st.title("🏀 NBA JUGGERNAUT V3.0")
 
-tab1, tab2 = st.tabs(["🏆 Game Predictor (Live Odds + Injuries)", "📊 Player Prop Sniper"])
+tab1, tab2 = st.tabs(["🏆 Game Predictor", "📊 Player Prop Sniper"])
 
 with tab1:
     df_games, pkg = load_brain()
@@ -341,9 +380,14 @@ with tab2:
         is_home = st.toggle("Is Home Game?", value=True)
         
         if st.button("ANALYZE PLAYER"):
-            with st.spinner("Crunching numbers..."):
+            with st.spinner("Crunching numbers & Scanning Vegas..."):
                 logs = fetch_player_logs(sel_p_id)
                 def_data = get_defense_rankings()
+                
+                # --- NEW: FETCH PROP ODDS ---
+                # Find game ID for the team
+                game_id = get_game_id_for_team(sel_team_name)
+                prop_lines = get_player_props(game_id, sel_p_name)
                 
                 if not logs.empty:
                     l5 = logs.head(5)
@@ -368,7 +412,7 @@ with tab2:
                     st.subheader(f"Defense Matchup: {opp_badge}")
                     
                     cols = st.columns(4)
-                    cats = ['PTS', 'REB', 'AST', 'PRA']
+                    cats = ['PTS', 'REB', 'AST']
                     
                     for i, cat in enumerate(cats):
                         avg_l5 = l5[cat].mean()
@@ -383,9 +427,20 @@ with tab2:
                         if opp_rank != "N/A":
                             if opp_rank >= 25: proj *= 1.05 
                             elif opp_rank <= 5: proj *= 0.95 
-                            
+                        
+                        # --- PROP SNIPER LOGIC ---
+                        vegas_line = prop_lines.get(cat)
+                        rec = ""
+                        if vegas_line:
+                            diff = proj - vegas_line
+                            if diff > 1.5: rec = f"✅ OVER {vegas_line}"
+                            elif diff < -1.5: rec = f"✅ UNDER {vegas_line}"
+                            else: rec = f"⚪ NO EDGE ({vegas_line})"
+                        else:
+                            rec = "⚠️ No Line Found"
+
                         with cols[i]:
-                            st.metric(f"Proj {cat}", f"{proj:.1f}", delta=f"L5: {avg_l5:.1f}")
+                            st.metric(f"Proj {cat}", f"{proj:.1f}", delta=rec)
                             
                     st.divider()
                     st.subheader("Last 5 Games Trend")
