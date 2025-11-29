@@ -14,7 +14,7 @@ from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V2.7.3", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V2.7.4", layout="wide", page_icon="🏀")
 
 # --- STEALTH HEADERS ---
 custom_headers = {
@@ -118,13 +118,49 @@ def load_brain():
 def normalize_name(name):
     return ''.join(c for c in unicodedata.normalize('NFD', name) if unicodedata.category(c) != 'Mn')
 
+# NEW: ROBUST ODDS API MAPPING
+def get_odds_team_map():
+    """Maps Odds API team names to NBA Abbreviations."""
+    return {
+        "Atlanta Hawks": "ATL",
+        "Boston Celtics": "BOS",
+        "Brooklyn Nets": "BKN",
+        "Charlotte Hornets": "CHA",
+        "Chicago Bulls": "CHI",
+        "Cleveland Cavaliers": "CLE",
+        "Dallas Mavericks": "DAL",
+        "Denver Nuggets": "DEN",
+        "Detroit Pistons": "DET",
+        "Golden State Warriors": "GSW",
+        "Houston Rockets": "HOU",
+        "Indiana Pacers": "IND",
+        "Los Angeles Clippers": "LAC",
+        "LA Clippers": "LAC",
+        "Los Angeles Lakers": "LAL",
+        "LA Lakers": "LAL",
+        "Memphis Grizzlies": "MEM",
+        "Miami Heat": "MIA",
+        "Milwaukee Bucks": "MIL",
+        "Minnesota Timberwolves": "MIN",
+        "New Orleans Pelicans": "NOP",
+        "New York Knicks": "NYK",
+        "Oklahoma City Thunder": "OKC",
+        "Orlando Magic": "ORL",
+        "Philadelphia 76ers": "PHI",
+        "Phoenix Suns": "PHX",
+        "Portland Trail Blazers": "POR",
+        "Sacramento Kings": "SAC",
+        "San Antonio Spurs": "SAS",
+        "Toronto Raptors": "TOR",
+        "Utah Jazz": "UTA",
+        "Washington Wizards": "WAS"
+    }
+
 # NEW: HYBRID SCHEDULE FETCH (ODDS API + NBA API BACKUP)
 @st.cache_data(ttl=3600)
 def get_todays_slate():
     """Fetches today's games using Odds API (Primary) and NBA API (Backup)."""
     slate = []
-    teams = nba_teams_static.get_teams()
-    name_to_abbr = {t['full_name']: t['abbreviation'] for t in teams}
     
     # 1. Try The-Odds-API (Best for "Game Day" Schedule)
     try:
@@ -132,21 +168,13 @@ def get_todays_slate():
         r = requests.get(ODDS_URL, params=params)
         if r.status_code == 200:
             data = r.json()
+            mapper = get_odds_team_map()
             for game in data:
-                home = game.get('home_team')
-                away = game.get('away_team')
+                home_name = game.get('home_team')
+                away_name = game.get('away_team')
                 
-                # Standard Map
-                h_abbr = name_to_abbr.get(home)
-                a_abbr = name_to_abbr.get(away)
-                
-                # Manual Fixes for naming differences
-                if not h_abbr:
-                    if "Clippers" in home: h_abbr = "LAC"
-                    elif "Lakers" in home: h_abbr = "LAL"
-                if not a_abbr:
-                    if "Clippers" in away: a_abbr = "LAC"
-                    elif "Lakers" in away: a_abbr = "LAL"
+                h_abbr = mapper.get(home_name)
+                a_abbr = mapper.get(away_name)
                 
                 if h_abbr and a_abbr:
                     slate.append(f"{a_abbr} @ {h_abbr}")
@@ -166,6 +194,7 @@ def get_todays_slate():
         games = board.get_data_frames()[0]
         
         if not games.empty:
+            teams = nba_teams_static.get_teams()
             id_to_abbr = {t['id']: t['abbreviation'] for t in teams}
             for _, row in games.iterrows():
                 h_abbr = id_to_abbr.get(row['HOME_TEAM_ID'])
@@ -334,7 +363,7 @@ def fetch_player_logs(player_id):
         return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V2.7.3")
+st.title("🏀 NBA JUGGERNAUT V2.7.4")
 
 tab1, tab2 = st.tabs(["🏆 Game Predictor (Live Odds + Injuries)", "📊 Player Prop Sniper"])
 
@@ -414,10 +443,12 @@ with tab1:
                     best_odds = 0
                     sportsbook = "Unknown"
                     
+                    odds_map = get_odds_team_map()
+                    
                     for game in live_odds_data:
                         api_home = game.get('home_team', '')
-                        # USE THE SMART MAP to find Abbr from Full Name
-                        mapped_home = team_map.get(api_home, "Unknown")
+                        # USE THE SMART MAP
+                        mapped_home = odds_map.get(api_home)
                         
                         if mapped_home == selected_home:
                             bookmakers = game.get('bookmakers', [])
@@ -429,7 +460,7 @@ with tab1:
                                         for outcome in m['outcomes']:
                                             # Check Outcome Name using Map
                                             outcome_name = outcome.get('name', '')
-                                            mapped_outcome = team_map.get(outcome_name, "")
+                                            mapped_outcome = odds_map.get(outcome_name)
                                             
                                             if mapped_outcome == winner:
                                                 best_odds = outcome.get('price', 0)
