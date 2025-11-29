@@ -8,13 +8,13 @@ import unicodedata
 from datetime import datetime
 import pytz 
 from nba_api.stats.static import teams as nba_teams_static
-from nba_api.stats.endpoints import commonteamroster, playergamelog, leaguedashteamstats, scoreboardv2
+from nba_api.stats.endpoints import commonteamroster, playergamelog, leaguedashteamstats, scoreboardv2, leaguedashplayerstats
 from bs4 import BeautifulSoup
 from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V3.0", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V3.1", layout="wide", page_icon="🏀")
 
 # --- STEALTH HEADERS ---
 custom_headers = {
@@ -102,7 +102,6 @@ def get_odds_team_map():
 @st.cache_data(ttl=3600)
 def get_todays_slate():
     slate = []
-    # 1. Try Odds API
     try:
         url = f"{ODDS_BASE_URL}/odds"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
@@ -116,7 +115,6 @@ def get_todays_slate():
                 if h_abbr and a_abbr: slate.append(f"{a_abbr} @ {h_abbr}")
             if slate: return list(set(slate))
     except: pass
-    # 2. Try NBA API
     try:
         est = pytz.timezone('US/Eastern')
         today = datetime.now(est).strftime('%Y-%m-%d')
@@ -142,10 +140,9 @@ def get_live_odds():
         return []
     except: return []
 
-# --- NEW: PROP SNIPER ENGINE ---
+# --- PROP SNIPER ENGINE ---
 @st.cache_data(ttl=3600)
 def get_game_id_for_team(team_name):
-    """Finds the Odds API Game ID for a specific team."""
     try:
         url = f"{ODDS_BASE_URL}/events"
         params = {'apiKey': ODDS_API_KEY}
@@ -157,41 +154,28 @@ def get_game_id_for_team(team_name):
     except: pass
     return None
 
-@st.cache_data(ttl=300) # Short cache for live props
+@st.cache_data(ttl=300)
 def get_player_props(game_id, player_name):
-    """Fetches Points, Rebounds, Assists lines for a player."""
     props = {'PTS': None, 'REB': None, 'AST': None}
     if not game_id: return props
-    
     try:
         url = f"{ODDS_BASE_URL}/events/{game_id}/odds"
-        # Requesting player props markets
-        params = {
-            'apiKey': ODDS_API_KEY,
-            'regions': 'us',
-            'markets': 'player_points,player_rebounds,player_assists',
-            'oddsFormat': 'american'
-        }
+        params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'player_points,player_rebounds,player_assists', 'oddsFormat': 'american'}
         r = requests.get(url, params=params)
-        if r.status_code != 200: return props
-        
-        data = r.json()
-        # Parse bookmakers
-        for book in data.get('bookmakers', []):
-            for market in book.get('markets', []):
-                key = market['key']
-                # Determine prop type
-                p_type = None
-                if key == 'player_points': p_type = 'PTS'
-                elif key == 'player_rebounds': p_type = 'REB'
-                elif key == 'player_assists': p_type = 'AST'
-                
-                if p_type and not props[p_type]: # Get first available line
-                    for outcome in market['outcomes']:
-                        # Fuzzy match player name (e.g. "L. James" vs "LeBron James")
-                        if outcome['description'].split()[-1] in player_name: 
-                            props[p_type] = outcome['point']
-                            break
+        if r.status_code == 200:
+            data = r.json()
+            for book in data.get('bookmakers', []):
+                for market in book.get('markets', []):
+                    key = market['key']
+                    p_type = None
+                    if key == 'player_points': p_type = 'PTS'
+                    elif key == 'player_rebounds': p_type = 'REB'
+                    elif key == 'player_assists': p_type = 'AST'
+                    if p_type and not props[p_type]:
+                        for outcome in market['outcomes']:
+                            if outcome['description'].split()[-1] in player_name: 
+                                props[p_type] = outcome['point']
+                                break
     except: pass
     return props
 
@@ -266,18 +250,26 @@ def get_defense_rankings():
         return df[['TEAM_NAME', 'TEAM_ID', 'PTS_RANK', '3PM_RANK']]
     except: return pd.DataFrame()
 
-# --- FIXED ROSTER FUNCTION ---
+# --- ROSTER FUNCTION (BACKDOOR STRATEGY) ---
 @st.cache_data(ttl=3600)
 def get_roster(team_id):
-    """Tries multiple methods to bypass cloud blocks."""
-    try:
-        roster = commonteamroster.CommonTeamRoster(team_id=team_id, headers=custom_headers, timeout=5)
-        return roster.get_data_frames()[0]
-    except: pass
+    """Tries standard roster, then falls back to stats endpoint."""
+    # Method 1: CommonTeamRoster (Official)
     try:
         roster = commonteamroster.CommonTeamRoster(team_id=team_id, season='2024-25', headers=custom_headers, timeout=5)
         return roster.get_data_frames()[0]
     except: pass
+    
+    # Method 2: LeagueDashPlayerStats (Backdoor)
+    try:
+        # This endpoint returns all players, filter by team_id
+        stats = leaguedashplayerstats.LeagueDashPlayerStats(team_id_nullable=team_id, season='2024-25', headers=custom_headers, timeout=10)
+        df = stats.get_data_frames()[0]
+        # Standardize columns
+        df = df.rename(columns={'PLAYER_NAME': 'PLAYER'})
+        return df
+    except: pass
+    
     return pd.DataFrame()
 
 def fetch_player_logs(player_id):
@@ -290,7 +282,7 @@ def fetch_player_logs(player_id):
     except: return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V3.0")
+st.title("🏀 NBA JUGGERNAUT V3.1")
 
 tab1, tab2 = st.tabs(["🏆 Game Predictor", "📊 Player Prop Sniper"])
 
@@ -360,10 +352,8 @@ with tab1:
 
 with tab2:
     st.markdown("### 🎯 Weighted Prop Calculation")
-    
     all_teams = nba_teams_static.get_teams()
     team_opts = {t['full_name']: t['id'] for t in all_teams}
-    
     sel_team_name = st.selectbox("Team", list(team_opts.keys()), key="prop_team_sel")
     sel_team_id = team_opts[sel_team_name]
     
@@ -376,30 +366,22 @@ with tab2:
         opp_teams = sorted(list(team_opts.keys()))
         sel_opp_name = st.selectbox("Opponent", opp_teams, key="prop_opp_sel")
         sel_opp_id = team_opts[sel_opp_name]
-        
         is_home = st.toggle("Is Home Game?", value=True)
         
         if st.button("ANALYZE PLAYER"):
             with st.spinner("Crunching numbers & Scanning Vegas..."):
                 logs = fetch_player_logs(sel_p_id)
                 def_data = get_defense_rankings()
-                
-                # --- NEW: FETCH PROP ODDS ---
-                # Find game ID for the team
                 game_id = get_game_id_for_team(sel_team_name)
                 prop_lines = get_player_props(game_id, sel_p_name)
                 
                 if not logs.empty:
-                    l5 = logs.head(5)
-                    l10 = logs.head(10)
-                    sea = logs
+                    l5, l10, sea = logs.head(5), logs.head(10), logs
                     home_games = logs[logs['LOCATION'] == 'HOME']
                     away_games = logs[logs['LOCATION'] == 'AWAY']
                     
                     st.divider()
-                    
-                    opp_rank = "N/A"
-                    opp_badge = ""
+                    opp_rank, opp_badge = "N/A", ""
                     if not def_data.empty:
                         opp_row = def_data[def_data['TEAM_ID'] == sel_opp_id]
                         if not opp_row.empty:
@@ -410,25 +392,18 @@ with tab2:
                             opp_rank = rank
                     
                     st.subheader(f"Defense Matchup: {opp_badge}")
-                    
                     cols = st.columns(4)
                     cats = ['PTS', 'REB', 'AST']
                     
                     for i, cat in enumerate(cats):
-                        avg_l5 = l5[cat].mean()
-                        avg_l10 = l10[cat].mean()
-                        avg_sea = sea[cat].mean()
+                        avg_l5, avg_l10, avg_sea = l5[cat].mean(), l10[cat].mean(), sea[cat].mean()
                         proj = (avg_l5 * 0.5) + (avg_l10 * 0.3) + (avg_sea * 0.2)
-                        
                         loc_avg = home_games[cat].mean() if is_home else away_games[cat].mean()
-                        if pd.notna(loc_avg):
-                            proj = (proj * 0.8) + (loc_avg * 0.2)
-                            
+                        if pd.notna(loc_avg): proj = (proj * 0.8) + (loc_avg * 0.2)
                         if opp_rank != "N/A":
                             if opp_rank >= 25: proj *= 1.05 
                             elif opp_rank <= 5: proj *= 0.95 
                         
-                        # --- PROP SNIPER LOGIC ---
                         vegas_line = prop_lines.get(cat)
                         rec = ""
                         if vegas_line:
@@ -436,11 +411,9 @@ with tab2:
                             if diff > 1.5: rec = f"✅ OVER {vegas_line}"
                             elif diff < -1.5: rec = f"✅ UNDER {vegas_line}"
                             else: rec = f"⚪ NO EDGE ({vegas_line})"
-                        else:
-                            rec = "⚠️ No Line Found"
+                        else: rec = "⚠️ No Line"
 
-                        with cols[i]:
-                            st.metric(f"Proj {cat}", f"{proj:.1f}", delta=rec)
+                        with cols[i]: st.metric(f"Proj {cat}", f"{proj:.1f}", delta=rec)
                             
                     st.divider()
                     st.subheader("Last 5 Games Trend")
