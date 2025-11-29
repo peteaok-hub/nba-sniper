@@ -6,6 +6,7 @@ import os
 import requests
 import unicodedata
 from datetime import datetime
+import pytz 
 from nba_api.stats.static import teams as nba_teams_static
 from nba_api.stats.endpoints import commonteamroster, playergamelog, leaguedashteamstats, scoreboardv2
 from bs4 import BeautifulSoup
@@ -13,9 +14,9 @@ from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V2.5", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V2.7", layout="wide", page_icon="🏀")
 
-# Custom headers to stop the NBA from blocking us
+# Custom headers to avoid NBA blocking
 custom_headers = {
     'Host': 'stats.nba.com',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:72.0) Gecko/20100101 Firefox/72.0',
@@ -27,13 +28,21 @@ custom_headers = {
     'Referer': 'https://stats.nba.com/',
 }
 
-# --- ODDS API KEYS ---
+# ODDS API
 ODDS_API_KEY = "3e039d8cfd426d394b020b55bd303a07"
 ODDS_URL = "https://api.the-odds-api.com/v4/sports/basketball_nba/odds"
 
+# --- SIDEBAR CONTROLS ---
+with st.sidebar:
+    st.header("⚙️ Sniper Controls")
+    if st.button("🔄 Force Refresh Data", type="primary"):
+        st.cache_data.clear()
+        st.rerun()
+    st.caption("Press this if rosters or odds look outdated.")
+
 # --- INTERNAL BRAIN BUILDER (SELF-HEALING) ---
 def rebuild_brain():
-    """Rebuilds the ML model if files are missing."""
+    """Rebuilds the ML model if files are missing on Cloud."""
     status = st.empty()
     status.info("🧠 Brain not found. Initializing Self-Healing Protocol... (Downloading Data)")
     
@@ -49,6 +58,7 @@ def rebuild_brain():
         df = pd.read_csv("nba_games.csv", parse_dates=["date"])
         df = df.sort_values("date")
         
+        # Normalize Legacy Team Codes
         code_map = {"NOH":"NOP", "CHO":"CHA", "BRK":"BKN", "PHO":"PHX"}
         df.replace(code_map, inplace=True)
         
@@ -109,11 +119,15 @@ def load_brain():
 def normalize_name(name):
     return ''.join(c for c in unicodedata.normalize('NFD', name) if unicodedata.category(c) != 'Mn')
 
+# NEW: TIMEZONE AWARE SCHEDULE FETCH
 @st.cache_data(ttl=3600)
 def get_todays_slate():
-    """Fetches today's games and returns a list of matchups."""
+    """Fetches today's games using US/Eastern time."""
     try:
-        today = datetime.now().strftime('%Y-%m-%d')
+        # FORCE US/EASTERN TIME
+        est = pytz.timezone('US/Eastern')
+        today = datetime.now(est).strftime('%Y-%m-%d')
+        
         board = scoreboardv2.ScoreboardV2(game_date=today, headers=custom_headers)
         games = board.get_data_frames()[0]
         
@@ -139,12 +153,11 @@ def get_todays_slate():
 
 @st.cache_data(ttl=3600)
 def get_live_odds():
-    """Fetches live odds from The-Odds-API."""
     try:
         params = {
             'apiKey': ODDS_API_KEY,
             'regions': 'us',
-            'markets': 'h2h', # Moneyline
+            'markets': 'h2h',
             'oddsFormat': 'american'
         }
         response = requests.get(ODDS_URL, params=params)
@@ -158,36 +171,21 @@ def get_live_odds():
 def normalize_cbs_name(cbs_name):
     """Maps CBS Sports Team Names to Official NBA Names."""
     mapping = {
-        "Golden St.": "Golden State Warriors",
-        "L.A. Lakers": "Los Angeles Lakers",
-        "L.A. Clippers": "Los Angeles Clippers",
-        "San Antonio": "San Antonio Spurs",
-        "New York": "New York Knicks",
-        "New Orleans": "New Orleans Pelicans",
-        "Okla. City": "Oklahoma City Thunder",
-        "Utah": "Utah Jazz",
-        "Phoenix": "Phoenix Suns",
-        "Philadelphia": "Philadelphia 76ers",
-        "Miami": "Miami Heat",
-        "Boston": "Boston Celtics",
-        "Atlanta": "Atlanta Hawks",
-        "Brooklyn": "Brooklyn Nets",
-        "Charlotte": "Charlotte Hornets",
-        "Chicago": "Chicago Bulls",
-        "Cleveland": "Cleveland Cavaliers",
-        "Dallas": "Dallas Mavericks",
-        "Denver": "Denver Nuggets",
-        "Detroit": "Detroit Pistons",
-        "Houston": "Houston Rockets",
-        "Indiana": "Indiana Pacers",
-        "Memphis": "Memphis Grizzlies",
-        "Milwaukee": "Milwaukee Bucks",
-        "Minnesota": "Minnesota Timberwolves",
-        "Orlando": "Orlando Magic",
-        "Portland": "Portland Trail Blazers",
-        "Sacramento": "Sacramento Kings",
-        "Toronto": "Toronto Raptors",
-        "Washington": "Washington Wizards"
+        "Golden St.": "Golden State Warriors", "L.A. Lakers": "Los Angeles Lakers",
+        "L.A. Clippers": "Los Angeles Clippers", "San Antonio": "San Antonio Spurs",
+        "New York": "New York Knicks", "New Orleans": "New Orleans Pelicans",
+        "Okla. City": "Oklahoma City Thunder", "Utah": "Utah Jazz",
+        "Phoenix": "Phoenix Suns", "Philadelphia": "Philadelphia 76ers",
+        "Miami": "Miami Heat", "Boston": "Boston Celtics",
+        "Atlanta": "Atlanta Hawks", "Brooklyn": "Brooklyn Nets",
+        "Charlotte": "Charlotte Hornets", "Chicago": "Chicago Bulls",
+        "Cleveland": "Cleveland Cavaliers", "Dallas": "Dallas Mavericks",
+        "Denver": "Denver Nuggets", "Detroit": "Detroit Pistons",
+        "Houston": "Houston Rockets", "Indiana": "Indiana Pacers",
+        "Memphis": "Memphis Grizzlies", "Milwaukee": "Milwaukee Bucks",
+        "Minnesota": "Minnesota Timberwolves", "Orlando": "Orlando Magic",
+        "Portland": "Portland Trail Blazers", "Sacramento": "Sacramento Kings",
+        "Toronto": "Toronto Raptors", "Washington": "Washington Wizards"
     }
     return mapping.get(cbs_name, cbs_name) 
 
@@ -202,14 +200,14 @@ def get_injury_report():
         
         injuries = {}
         
-        for team_section in soup.find_all('div', class_='TeamLogoNameLockup'):
-            team_name_tag = team_section.find('span', class_='TeamLogoNameLockup-name')
-            if not team_name_tag: continue
+        for section in soup.find_all('div', class_='TeamLogoNameLockup'):
+            name_tag = section.find('span', class_='TeamLogoNameLockup-name')
+            if not name_tag: continue
             
-            raw_team_name = team_section.find('a').text.strip()
+            raw_team_name = section.find('a').text.strip()
             clean_team_name = normalize_cbs_name(raw_team_name) 
             
-            parent_card = team_section.find_parent('div', class_='TableBase')
+            parent_card = section.find_parent('div', class_='TableBase')
             if not parent_card: continue
             
             rows = parent_card.find_all('tr', class_='TableBase-bodyTr')
@@ -228,11 +226,9 @@ def get_injury_report():
             
         return injuries
     except Exception as e:
-        print(f"Injury Scraping Error: {e}")
         return {}
 
 def check_injuries(home_abbr, away_abbr, injury_data, team_map_full):
-    """Checks if specific teams have active injuries."""
     alerts = []
     
     abbr_to_full = {v: k for k, v in team_map_full.items()}
@@ -242,13 +238,13 @@ def check_injuries(home_abbr, away_abbr, injury_data, team_map_full):
     # Check Home
     if home_full and home_full in injury_data:
         for inj in injury_data[home_full]:
-            icon = "🔴" if "Expected to be out" in inj['status'] or "Out" in inj['status'] else "🟡"
+            icon = "🔴" if "Out" in inj['status'] else "🟡"
             alerts.append(f"{icon} **{home_abbr}** - {inj['player']}: {inj['injury']} ({inj['status']})")
             
     # Check Away
     if away_full and away_full in injury_data:
         for inj in injury_data[away_full]:
-            icon = "🔴" if "Expected to be out" in inj['status'] or "Out" in inj['status'] else "🟡"
+            icon = "🔴" if "Out" in inj['status'] else "🟡"
             alerts.append(f"{icon} **{away_abbr}** - {inj['player']}: {inj['injury']} ({inj['status']})")
             
     return alerts
@@ -303,7 +299,7 @@ def fetch_player_logs(player_id):
         return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V2.5")
+st.title("🏀 NBA JUGGERNAUT V2.7")
 
 tab1, tab2 = st.tabs(["🏆 Game Predictor (Live Odds + Injuries)", "📊 Player Prop Sniper"])
 
@@ -326,7 +322,7 @@ with tab1:
             mode = st.radio("Select Source:", ["📅 Today's Games", "🛠️ Custom Matchup"], horizontal=True)
         else:
             mode = "🛠️ Custom Matchup"
-            st.info("No games found for today. Using Custom Mode.")
+            st.info("No games found for today (US/Eastern Time). Using Custom Mode.")
 
         selected_home = None
         selected_away = None
@@ -350,14 +346,15 @@ with tab1:
             injury_alerts = check_injuries(selected_home, selected_away, injury_report, team_map)
             
             if injury_alerts:
-                st.error(f"⚠️ {len(injury_alerts)} Active Injury Alerts Found:")
-                for alert in injury_alerts:
-                    st.write(alert)
+                with st.expander(f"⚠️ Injury Report ({len(injury_alerts)})", expanded=True):
+                    for alert in injury_alerts:
+                        st.markdown(alert)
             else:
                 st.success("✅ Clean Slate: No major injuries found in report.")
 
             if st.button("PREDICT WINNER", type="primary"):
                 try:
+                    # 1. AI PREDICTION
                     h_stats = df_games[df_games['team']==selected_home].iloc[-1][features]
                     input_data = pd.DataFrame([h_stats], columns=features)
                     sc_data = scaler.transform(input_data)
@@ -434,13 +431,17 @@ with tab2:
     
     all_teams = nba_teams_static.get_teams()
     team_opts = {t['full_name']: t['id'] for t in all_teams}
-    selected_team_name = st.selectbox("Select Player's Team", list(team_opts.keys()))
+    
+    # FIX: Add unique key to reset on change
+    selected_team_name = st.selectbox("Select Player's Team", list(team_opts.keys()), key="team_selector")
     selected_team_id = team_opts[selected_team_name]
 
     roster_df = get_roster(selected_team_id)
     if not roster_df.empty:
         player_opts = {row['PLAYER']: row['PLAYER_ID'] for _, row in roster_df.iterrows()}
-        selected_player_name = st.selectbox("Select Player", list(player_opts.keys()))
+        
+        # FIX: Dynamic Key ensures player list resets when team changes
+        selected_player_name = st.selectbox("Select Player", list(player_opts.keys()), key=f"player_selector_{selected_team_id}")
         selected_player_id = player_opts[selected_player_name]
         
         if st.button("ANALYZE PLAYER"):
