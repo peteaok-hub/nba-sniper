@@ -14,18 +14,23 @@ from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V2.7.1", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V2.7.2", layout="wide", page_icon="🏀")
 
-# Custom headers to avoid NBA blocking
+# --- STEALTH HEADERS (Updated to prevent blocking) ---
 custom_headers = {
     'Host': 'stats.nba.com',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:72.0) Gecko/20100101 Firefox/72.0',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'application/json, text/plain, */*',
-    'Accept-Language': 'en-US,en;q=0.5',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
     'x-nba-stats-origin': 'stats',
     'x-nba-stats-token': 'true',
     'Connection': 'keep-alive',
     'Referer': 'https://stats.nba.com/',
+    'Origin': 'https://stats.nba.com',
+    'Sec-Fetch-Site': 'same-origin',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Dest': 'empty',
 }
 
 # ODDS API
@@ -307,17 +312,27 @@ def get_defense_rankings():
     except:
         return pd.DataFrame()
 
+# --- FIXED ROSTER FUNCTION ---
 @st.cache_data(ttl=3600)
 def get_roster(team_id):
     try:
-        roster = commonteamroster.CommonTeamRoster(team_id=team_id, headers=custom_headers)
+        # Explicitly requesting the 2024-25 season to avoid default issues
+        roster = commonteamroster.CommonTeamRoster(
+            team_id=team_id, 
+            season='2024-25',
+            headers=custom_headers
+        )
         return roster.get_data_frames()[0]
     except:
         return pd.DataFrame()
 
 def fetch_player_logs(player_id):
     try:
-        log = playergamelog.PlayerGameLog(player_id=player_id, season='2024-25', headers=custom_headers)
+        log = playergamelog.PlayerGameLog(
+            player_id=player_id, 
+            season='2024-25', 
+            headers=custom_headers
+        )
         df = log.get_data_frames()[0]
         df['PRA'] = df['PTS'] + df['REB'] + df['AST']
         df['LOCATION'] = np.where(df['MATCHUP'].str.contains('@'), 'AWAY', 'HOME')
@@ -326,7 +341,7 @@ def fetch_player_logs(player_id):
         return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V2.7.1")
+st.title("🏀 NBA JUGGERNAUT V2.7.2")
 
 tab1, tab2 = st.tabs(["🏆 Game Predictor (Live Odds + Injuries)", "📊 Player Prop Sniper"])
 
