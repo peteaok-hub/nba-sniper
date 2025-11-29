@@ -14,24 +14,22 @@ from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V2.8", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V2.9", layout="wide", page_icon="🏀")
 
-# --- STEALTH HEADERS ---
+# --- STEALTH HEADERS (Updated) ---
 custom_headers = {
     'Host': 'stats.nba.com',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
     'Accept': 'application/json, text/plain, */*',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'x-nba-stats-origin': 'stats',
-    'x-nba-stats-token': 'true',
+    'Origin': 'https://www.nba.com',
+    'Referer': 'https://www.nba.com/',
     'Connection': 'keep-alive',
-    'Referer': 'https://stats.nba.com/',
 }
 
 # ODDS API
 ODDS_API_KEY = "3e039d8cfd426d394b020b55bd303a07"
-ODDS_URL = "https://api.the-odds-api.com/v4/sports/basketball_nba/odds"
+ODDS_URL = "https://api.the-odds-api.com/v4/sports/basketball_nba/events" # Changed endpoint for props
 
 # --- SIDEBAR CONTROLS ---
 with st.sidebar:
@@ -104,9 +102,11 @@ def get_odds_team_map():
 @st.cache_data(ttl=3600)
 def get_todays_slate():
     slate = []
+    # 1. Try Odds API
     try:
+        url = "https://api.the-odds-api.com/v4/sports/basketball_nba/odds"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
-        r = requests.get(ODDS_URL, params=params)
+        r = requests.get(url, params=params)
         if r.status_code == 200:
             data = r.json()
             mapper = get_odds_team_map()
@@ -116,6 +116,7 @@ def get_todays_slate():
                 if h_abbr and a_abbr: slate.append(f"{a_abbr} @ {h_abbr}")
             if slate: return list(set(slate))
     except: pass
+    # 2. Try NBA API
     try:
         est = pytz.timezone('US/Eastern')
         today = datetime.now(est).strftime('%Y-%m-%d')
@@ -134,11 +135,22 @@ def get_todays_slate():
 @st.cache_data(ttl=3600)
 def get_live_odds():
     try:
+        url = "https://api.the-odds-api.com/v4/sports/basketball_nba/odds"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
-        response = requests.get(ODDS_URL, params=params)
+        response = requests.get(url, params=params)
         if response.status_code == 200: return response.json()
         return []
     except: return []
+
+# NEW: PROP ODDS FETCH
+@st.cache_data(ttl=3600)
+def get_prop_odds(game_id, prop_type):
+    # This feature requires paid Odds API plan for "event" specific props usually, 
+    # but we can try fetching the general props endpoint if available or mock the structure for V2.9
+    # For now, we will return a placeholder or implement basic if key allows.
+    # Note: Free keys often don't support player props. 
+    # We will simulate the logic structure so it's ready for a Pro Key.
+    return None 
 
 # --- INJURY GUARD ---
 def normalize_cbs_name(cbs_name):
@@ -211,16 +223,23 @@ def get_defense_rankings():
         return df[['TEAM_NAME', 'TEAM_ID', 'PTS_RANK', '3PM_RANK']]
     except: return pd.DataFrame()
 
+# --- AGGRESSIVE ROSTER FETCH (FIXED) ---
 @st.cache_data(ttl=3600)
 def get_roster(team_id):
+    """Tries multiple methods to bypass cloud blocks."""
+    # 1. Try default (no season param often works best on cloud)
     try:
-        roster = commonteamroster.CommonTeamRoster(team_id=team_id, season='2024-25', headers=custom_headers, timeout=10)
+        roster = commonteamroster.CommonTeamRoster(team_id=team_id, headers=custom_headers, timeout=5)
         return roster.get_data_frames()[0]
-    except:
-        try:
-            roster = commonteamroster.CommonTeamRoster(team_id=team_id, headers=custom_headers, timeout=10)
-            return roster.get_data_frames()[0]
-        except: return pd.DataFrame()
+    except: pass
+    
+    # 2. Try explicit season
+    try:
+        roster = commonteamroster.CommonTeamRoster(team_id=team_id, season='2024-25', headers=custom_headers, timeout=5)
+        return roster.get_data_frames()[0]
+    except: pass
+    
+    return pd.DataFrame()
 
 def fetch_player_logs(player_id):
     try:
@@ -232,7 +251,7 @@ def fetch_player_logs(player_id):
     except: return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V2.8")
+st.title("🏀 NBA JUGGERNAUT V2.9")
 
 tab1, tab2 = st.tabs(["🏆 Game Predictor (Live Odds + Injuries)", "📊 Player Prop Sniper"])
 
@@ -303,27 +322,22 @@ with tab1:
 with tab2:
     st.markdown("### 🎯 Weighted Prop Calculation")
     
-    # --- GOLD STANDARD LOGIC INTEGRATED ---
     all_teams = nba_teams_static.get_teams()
     team_opts = {t['full_name']: t['id'] for t in all_teams}
     
-    # 1. Team Selector (With Key)
     sel_team_name = st.selectbox("Team", list(team_opts.keys()), key="prop_team_sel")
     sel_team_id = team_opts[sel_team_name]
     
-    # 2. Roster (With Key Reset)
     roster_df = get_roster(sel_team_id)
     if not roster_df.empty:
         p_opts = {row['PLAYER']: row['PLAYER_ID'] for _, row in roster_df.iterrows()}
         sel_p_name = st.selectbox("Player", list(p_opts.keys()), key=f"prop_p_sel_{sel_team_id}")
         sel_p_id = p_opts[sel_p_name]
         
-        # 3. Opponent Selector (For Defense Logic)
         opp_teams = sorted(list(team_opts.keys()))
         sel_opp_name = st.selectbox("Opponent", opp_teams, key="prop_opp_sel")
         sel_opp_id = team_opts[sel_opp_name]
         
-        # 4. Location Selector
         is_home = st.toggle("Is Home Game?", value=True)
         
         if st.button("ANALYZE PLAYER"):
@@ -332,7 +346,6 @@ with tab2:
                 def_data = get_defense_rankings()
                 
                 if not logs.empty:
-                    # Filter Splits
                     l5 = logs.head(5)
                     l10 = logs.head(10)
                     sea = logs
@@ -341,13 +354,11 @@ with tab2:
                     
                     st.divider()
                     
-                    # --- DEFENSE INTEL ---
                     opp_rank = "N/A"
                     opp_badge = ""
                     if not def_data.empty:
                         opp_row = def_data[def_data['TEAM_ID'] == sel_opp_id]
                         if not opp_row.empty:
-                            # Using Points Allowed Rank as General Defense Proxy
                             rank = int(opp_row.iloc[0]['PTS_RANK'])
                             if rank >= 20: opp_badge = f"🟢 VS RANK #{rank} (SOFT)"
                             elif rank <= 10: opp_badge = f"🔴 VS RANK #{rank} (ELITE)"
@@ -360,31 +371,26 @@ with tab2:
                     cats = ['PTS', 'REB', 'AST', 'PRA']
                     
                     for i, cat in enumerate(cats):
-                        # 1. Base Weighted Average
                         avg_l5 = l5[cat].mean()
                         avg_l10 = l10[cat].mean()
                         avg_sea = sea[cat].mean()
                         proj = (avg_l5 * 0.5) + (avg_l10 * 0.3) + (avg_sea * 0.2)
                         
-                        # 2. Location Adjustment
                         loc_avg = home_games[cat].mean() if is_home else away_games[cat].mean()
                         if pd.notna(loc_avg):
                             proj = (proj * 0.8) + (loc_avg * 0.2)
                             
-                        # 3. Defense Adjustment
                         if opp_rank != "N/A":
-                            if opp_rank >= 25: proj *= 1.05 # Boost 5% for soft defense
-                            elif opp_rank <= 5: proj *= 0.95 # Drop 5% for elite defense
+                            if opp_rank >= 25: proj *= 1.05 
+                            elif opp_rank <= 5: proj *= 0.95 
                             
                         with cols[i]:
                             st.metric(f"Proj {cat}", f"{proj:.1f}", delta=f"L5: {avg_l5:.1f}")
                             
-                    st.caption("Projection includes: Recent Form (50%), Season (20%), Home/Away Split (User Selection), and Defensive Matchup Adjustment.")
-                    
                     st.divider()
                     st.subheader("Last 5 Games Trend")
                     st.line_chart(l5[['GAME_DATE', 'PTS', 'REB', 'AST']].set_index('GAME_DATE').iloc[::-1])
-                else:
-                    st.error("No game logs found.")
+                else: st.error("No game logs found.")
     else:
-        st.warning("Roster not found. Try 'Force Refresh'.")
+        st.warning("Could not fetch roster. This is likely a Cloud IP block by the NBA.")
+        st.caption("Try hitting 'Force Refresh Data' in the sidebar.")
