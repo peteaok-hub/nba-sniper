@@ -14,7 +14,7 @@ from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V2.7", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V2.7.1", layout="wide", page_icon="🏀")
 
 # Custom headers to avoid NBA blocking
 custom_headers = {
@@ -119,10 +119,45 @@ def load_brain():
 def normalize_name(name):
     return ''.join(c for c in unicodedata.normalize('NFD', name) if unicodedata.category(c) != 'Mn')
 
-# NEW: TIMEZONE AWARE SCHEDULE FETCH
+# NEW: HYBRID SCHEDULE FETCH (ODDS API + NBA API BACKUP)
 @st.cache_data(ttl=3600)
 def get_todays_slate():
-    """Fetches today's games using US/Eastern time."""
+    """Fetches today's games using Odds API (Primary) and NBA API (Backup)."""
+    slate = []
+    teams = nba_teams_static.get_teams()
+    name_to_abbr = {t['full_name']: t['abbreviation'] for t in teams}
+    
+    # 1. Try The-Odds-API (Best for "Game Day" Schedule)
+    try:
+        params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
+        r = requests.get(ODDS_URL, params=params)
+        if r.status_code == 200:
+            data = r.json()
+            for game in data:
+                home = game.get('home_team')
+                away = game.get('away_team')
+                
+                # Standard Map
+                h_abbr = name_to_abbr.get(home)
+                a_abbr = name_to_abbr.get(away)
+                
+                # Manual Fixes for naming differences
+                if not h_abbr:
+                    if "Clippers" in home: h_abbr = "LAC"
+                    elif "Lakers" in home: h_abbr = "LAL"
+                if not a_abbr:
+                    if "Clippers" in away: a_abbr = "LAC"
+                    elif "Lakers" in away: a_abbr = "LAL"
+                
+                if h_abbr and a_abbr:
+                    slate.append(f"{a_abbr} @ {h_abbr}")
+            
+            # If we found games, return immediately (don't need NBA API)
+            if slate: return list(set(slate))
+    except Exception as e:
+        print(f"Odds API Schedule Error: {e}")
+
+    # 2. Fallback to NBA ScoreboardV2 (If Odds API fails or is empty)
     try:
         # FORCE US/EASTERN TIME
         est = pytz.timezone('US/Eastern')
@@ -131,25 +166,17 @@ def get_todays_slate():
         board = scoreboardv2.ScoreboardV2(game_date=today, headers=custom_headers)
         games = board.get_data_frames()[0]
         
-        if games.empty:
-            return []
-
-        all_teams = nba_teams_static.get_teams()
-        id_to_abbr = {t['id']: t['abbreviation'] for t in all_teams}
+        if not games.empty:
+            id_to_abbr = {t['id']: t['abbreviation'] for t in teams}
+            for _, row in games.iterrows():
+                h_abbr = id_to_abbr.get(row['HOME_TEAM_ID'])
+                a_abbr = id_to_abbr.get(row['VISITOR_TEAM_ID'])
+                if h_abbr and a_abbr:
+                    slate.append(f"{a_abbr} @ {h_abbr}")
+    except Exception as e:
+        print(f"NBA API Schedule Error: {e}")
         
-        slate = []
-        for _, row in games.iterrows():
-            home_id = row['HOME_TEAM_ID']
-            away_id = row['VISITOR_TEAM_ID']
-            
-            if home_id in id_to_abbr and away_id in id_to_abbr:
-                h_abbr = id_to_abbr[home_id]
-                a_abbr = id_to_abbr[away_id]
-                slate.append(f"{a_abbr} @ {h_abbr}")
-        
-        return slate
-    except:
-        return []
+    return list(set(slate))
 
 @st.cache_data(ttl=3600)
 def get_live_odds():
@@ -299,7 +326,7 @@ def fetch_player_logs(player_id):
         return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V2.7")
+st.title("🏀 NBA JUGGERNAUT V2.7.1")
 
 tab1, tab2 = st.tabs(["🏆 Game Predictor (Live Odds + Injuries)", "📊 Player Prop Sniper"])
 
@@ -318,11 +345,12 @@ with tab1:
         injury_report = get_injury_report() 
         team_map = get_team_map() 
 
+        # Default to Custom if no games found, BUT prioritize auto list
         if todays_games:
             mode = st.radio("Select Source:", ["📅 Today's Games", "🛠️ Custom Matchup"], horizontal=True)
         else:
             mode = "🛠️ Custom Matchup"
-            st.info("No games found for today (US/Eastern Time). Using Custom Mode.")
+            st.warning("⚠️ No games auto-detected. Using Custom Mode. (Check Internet/Time)")
 
         selected_home = None
         selected_away = None
