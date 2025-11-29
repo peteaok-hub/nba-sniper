@@ -4,6 +4,8 @@ import requests
 import unicodedata
 import os
 import pickle
+import time
+import random
 from datetime import datetime
 import pytz
 from bs4 import BeautifulSoup
@@ -13,24 +15,37 @@ from nba_api.stats.static import teams as nba_teams_static
 from nba_api.stats.endpoints import commonteamroster, playergamelog, leaguedashteamstats, scoreboardv2, leaguedashplayerstats, commonallplayers
 
 # --- 1. CONFIGURATION & CONSTANTS ---
-HISTORY_FILE = "nba_betting_history.csv"
 BRAIN_FILE = "nba_brain.pkl"
 DATA_FILE = "nba_games_rolled.csv"
+HISTORY_FILE = "nba_betting_history.csv" # Added HISTORY_FILE constant here
 
 # ODDS API
 ODDS_API_KEY = "3e039d8cfd426d394b020b55bd303a07"
 ODDS_BASE_URL = "https://api.the-odds-api.com/v4/sports/basketball_nba"
 
-# STEALTH HEADERS
-CUSTOM_HEADERS = {
-    'Host': 'stats.nba.com',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-    'Accept': 'application/json, text/plain, */*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Origin': 'https://www.nba.com',
-    'Referer': 'https://www.nba.com/',
-    'Connection': 'keep-alive',
-}
+# STEALTH HEADERS (Enhanced)
+def get_headers():
+    """Returns randomized headers to mimic real browser behavior."""
+    user_agents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0'
+    ]
+    return {
+        'Host': 'stats.nba.com',
+        'User-Agent': random.choice(user_agents),
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Origin': 'https://www.nba.com',
+        'Referer': 'https://www.nba.com/',
+        'Connection': 'keep-alive',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+        'Pragma': 'no-cache',
+        'Cache-Control': 'no-cache',
+    }
 
 # --- 2. SELF-HEALING & DATA ENGINE ---
 
@@ -117,7 +132,7 @@ def get_todays_slate():
     try:
         est = pytz.timezone('US/Eastern')
         today = datetime.now(est).strftime('%Y-%m-%d')
-        board = scoreboardv2.ScoreboardV2(game_date=today, headers=CUSTOM_HEADERS)
+        board = scoreboardv2.ScoreboardV2(game_date=today, headers=get_headers(), timeout=5)
         games = board.get_data_frames()[0]
         if not games.empty:
             teams = nba_teams_static.get_teams()
@@ -171,7 +186,6 @@ def get_player_props(game_id, player_name):
                     
                     if p_type and not props[p_type]:
                         for outcome in market['outcomes']:
-                            # Fuzzy match
                             if outcome['description'].split()[-1] in player_name:
                                 props[p_type] = outcome['point']
                                 break
@@ -232,26 +246,47 @@ def check_injuries(home_abbr, away_abbr, injury_data, team_map_full):
     return alerts
 
 def get_roster(team_id):
-    """Atomic Roster Fetch: Multi-Layer Fallback."""
-    # Layer 1: Official
+    """Atomic Roster Fetch: Multi-Layer Fallback with Exponential Backoff."""
+    
+    # Initialize a session for persistent connections
+    session = requests.Session()
+    session.headers.update(get_headers())
+
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            # Layer 1: Official
+            roster = commonteamroster.CommonTeamRoster(team_id=team_id, season='2024-25', headers=get_headers(), timeout=5)
+            df = roster.get_data_frames()[0]
+            if not df.empty: return df
+        except Exception as e:
+            print(f"Roster Layer 1 Attempt {attempt+1} failed: {e}")
+            time.sleep(1 * (attempt + 1)) # Backoff
+    
+    for attempt in range(max_retries):
+        try:
+             # Layer 2: Backdoor Stats
+            df = leaguedashplayerstats.LeagueDashPlayerStats(team_id_nullable=team_id, season='2024-25', headers=get_headers(), timeout=5).get_data_frames()[0]
+            if not df.empty:
+                 return df.rename(columns={'PLAYER_NAME': 'PLAYER', 'PLAYER_ID': 'PLAYER_ID'})
+        except Exception as e:
+             print(f"Roster Layer 2 Attempt {attempt+1} failed: {e}")
+             time.sleep(1 * (attempt + 1))
+
     try:
-        return commonteamroster.CommonTeamRoster(team_id=team_id, season='2024-25', headers=CUSTOM_HEADERS, timeout=3).get_data_frames()[0]
-    except: pass
-    # Layer 2: Backdoor Stats
-    try:
-        df = leaguedashplayerstats.LeagueDashPlayerStats(team_id_nullable=team_id, season='2024-25', headers=CUSTOM_HEADERS, timeout=5).get_data_frames()[0]
-        return df.rename(columns={'PLAYER_NAME': 'PLAYER', 'PLAYER_ID': 'PLAYER_ID'})
-    except: pass
-    # Layer 3: Nuclear (All Players)
-    try:
-        df = commonallplayers.CommonAllPlayers(is_only_current_season=1, headers=CUSTOM_HEADERS, timeout=10).get_data_frames()[0]
+        # Layer 3: Nuclear (All Players)
+        df = commonallplayers.CommonAllPlayers(is_only_current_season=1, headers=get_headers(), timeout=10).get_data_frames()[0]
         return df[df['TEAM_ID'] == team_id].rename(columns={'DISPLAY_FIRST_LAST': 'PLAYER', 'PERSON_ID': 'PLAYER_ID'})
-    except: pass
+    except Exception as e:
+        print(f"Roster Layer 3 failed: {e}")
+        pass
+    
     return pd.DataFrame()
 
 def fetch_player_logs(player_id):
     try:
-        log = playergamelog.PlayerGameLog(player_id=player_id, season='2024-25', headers=CUSTOM_HEADERS, timeout=10)
+        log = playergamelog.PlayerGameLog(player_id=player_id, season='2024-25', headers=get_headers(), timeout=10)
         df = log.get_data_frames()[0]
         df['PRA'] = df['PTS'] + df['REB'] + df['AST']
         df['LOCATION'] = np.where(df['MATCHUP'].str.contains('@'), 'AWAY', 'HOME')
@@ -260,7 +295,7 @@ def fetch_player_logs(player_id):
 
 def get_defense_rankings():
     try:
-        dash = leaguedashteamstats.LeagueDashTeamStats(measure_type_detailed_defense='Opponent', per_mode_detailed='PerGame', headers=CUSTOM_HEADERS)
+        dash = leaguedashteamstats.LeagueDashTeamStats(measure_type_detailed_defense='Opponent', per_mode_detailed='PerGame', headers=get_headers())
         df = dash.get_data_frames()[0]
         df['PTS_RANK'] = df['OPP_PTS'].rank(ascending=False)
         return df[['TEAM_NAME', 'TEAM_ID', 'PTS_RANK']]
