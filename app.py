@@ -14,9 +14,9 @@ from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper Juggernaut V2.7.2", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper Juggernaut V2.7.3", layout="wide", page_icon="🏀")
 
-# --- STEALTH HEADERS (Updated to prevent blocking) ---
+# --- STEALTH HEADERS ---
 custom_headers = {
     'Host': 'stats.nba.com',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -27,10 +27,6 @@ custom_headers = {
     'x-nba-stats-token': 'true',
     'Connection': 'keep-alive',
     'Referer': 'https://stats.nba.com/',
-    'Origin': 'https://stats.nba.com',
-    'Sec-Fetch-Site': 'same-origin',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Dest': 'empty',
 }
 
 # ODDS API
@@ -107,10 +103,8 @@ def rebuild_brain():
 # --- 1. LOAD BRAIN ENGINE ---
 @st.cache_resource
 def load_brain():
-    # Check if brain exists, if not, build it
     if not os.path.exists("nba_games_rolled.csv") or not os.path.exists("nba_brain.pkl"):
         return rebuild_brain()
-    
     try:
         df = pd.read_csv("nba_games_rolled.csv", parse_dates=["date"])
         with open("nba_brain.pkl", "rb") as f:
@@ -312,14 +306,13 @@ def get_defense_rankings():
     except:
         return pd.DataFrame()
 
-# --- FIXED ROSTER FUNCTION ---
+# --- FIXED ROSTER FUNCTION (REMOVED SEASON TO DEFAULT TO CURRENT) ---
 @st.cache_data(ttl=3600)
 def get_roster(team_id):
     try:
-        # Explicitly requesting the 2024-25 season to avoid default issues
+        # Default to current season by removing season param
         roster = commonteamroster.CommonTeamRoster(
             team_id=team_id, 
-            season='2024-25',
             headers=custom_headers
         )
         return roster.get_data_frames()[0]
@@ -341,7 +334,7 @@ def fetch_player_logs(player_id):
         return pd.DataFrame()
 
 # --- MAIN UI ---
-st.title("🏀 NBA JUGGERNAUT V2.7.2")
+st.title("🏀 NBA JUGGERNAUT V2.7.3")
 
 tab1, tab2 = st.tabs(["🏆 Game Predictor (Live Odds + Injuries)", "📊 Player Prop Sniper"])
 
