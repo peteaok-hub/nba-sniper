@@ -21,7 +21,7 @@ DATA_FILE = "nba_games_rolled.csv"
 ODDS_API_KEY = "3e039d8cfd426d394b020b55bd303a07"
 ODDS_BASE_URL = "https://api.the-odds-api.com/v4/sports/basketball_nba"
 
-# STEALTH HEADERS (To bypass NBA API blocks)
+# STEALTH HEADERS
 CUSTOM_HEADERS = {
     'Host': 'stats.nba.com',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
@@ -35,15 +35,12 @@ CUSTOM_HEADERS = {
 # --- 2. SELF-HEALING & DATA ENGINE ---
 
 def rebuild_brain_engine():
-    """Downloads data, processes stats, trains model, and saves brain."""
     print("🧠 INITIALIZING BRAIN REBUILD...")
     try:
-        # A. Download Data
         url = "https://drive.google.com/uc?export=download&id=1YyNpERG0jqPlpxZvvELaNcMHTiKVpfWe"
         r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
         with open(DATA_FILE, "wb") as f: f.write(r.content)
         
-        # B. Process Data
         df = pd.read_csv(DATA_FILE, parse_dates=["date"]).sort_values("date")
         code_map = {"NOH":"NOP", "CHO":"CHA", "BRK":"BKN", "PHO":"PHX"}
         df.replace(code_map, inplace=True)
@@ -60,7 +57,6 @@ def rebuild_brain_engine():
         df = pd.concat([df, r10], axis=1).fillna(0)
         df.to_csv(DATA_FILE, index=False)
         
-        # C. Train Model
         features = [c for c in df.columns if "_R10" in c]
         X, y = df[features], df["target"]
         scaler = StandardScaler()
@@ -77,7 +73,6 @@ def rebuild_brain_engine():
         return None, None
 
 def load_brain_engine():
-    """Loads the brain, or rebuilds if missing."""
     if not os.path.exists(DATA_FILE) or not os.path.exists(BRAIN_FILE):
         return rebuild_brain_engine()
     try:
@@ -87,7 +82,7 @@ def load_brain_engine():
     except:
         return rebuild_brain_engine()
 
-# --- 3. INTELLIGENCE MODULES (API CONNECTORS) ---
+# --- 3. INTELLIGENCE MODULES ---
 
 def get_odds_team_map():
     return {
@@ -102,10 +97,8 @@ def get_odds_team_map():
     }
 
 def get_todays_slate():
-    """Hybrid Schedule Fetcher (Odds API First -> NBA API Backup)."""
     slate = []
-    
-    # 1. Odds API (Primary)
+    # 1. Odds API
     try:
         url = f"{ODDS_BASE_URL}/odds"
         params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
@@ -120,7 +113,7 @@ def get_todays_slate():
             if slate: return list(set(slate))
     except: pass
     
-    # 2. NBA API (Backup)
+    # 2. NBA API Fallback
     try:
         est = pytz.timezone('US/Eastern')
         today = datetime.now(est).strftime('%Y-%m-%d')
@@ -134,7 +127,6 @@ def get_todays_slate():
                 a_abbr = id_to_abbr.get(row['VISITOR_TEAM_ID'])
                 if h_abbr and a_abbr: slate.append(f"{a_abbr} @ {h_abbr}")
     except: pass
-    
     return list(set(slate))
 
 def get_live_odds():
@@ -179,6 +171,7 @@ def get_player_props(game_id, player_name):
                     
                     if p_type and not props[p_type]:
                         for outcome in market['outcomes']:
+                            # Fuzzy match
                             if outcome['description'].split()[-1] in player_name:
                                 props[p_type] = outcome['point']
                                 break
@@ -275,3 +268,24 @@ def get_defense_rankings():
 
 def get_team_map():
     return {t['full_name']: t['abbreviation'] for t in nba_teams_static.get_teams()}
+
+# --- TELEMETRY ---
+def log_prediction(player, stat_type, line, projection, decision, edge, tags):
+    try:
+        new_rec = {
+            "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "Player": player,
+            "Stat": stat_type,
+            "Line": line,
+            "Proj": projection,
+            "Pick": decision,
+            "Edge": f"{edge:+.1f}",
+            "Tags": tags,
+            "Result": "Pending"
+        }
+        if os.path.exists(HISTORY_FILE): df = pd.read_csv(HISTORY_FILE)
+        else: df = pd.DataFrame(columns=new_rec.keys())
+        df = pd.concat([df, pd.DataFrame([new_rec])], ignore_index=True)
+        df.to_csv(HISTORY_FILE, index=False)
+        return True
+    except: return False
