@@ -11,7 +11,7 @@ st.set_page_config(page_title="NBA Sniper V4.1", layout="wide", page_icon="🏀"
 st.markdown("""
 <style>
     .stApp { background-color: #0e1117; color: white; }
-    .stat-card { background: #1f2937; padding: 15px; border-radius: 10px; text-align: center; border: 1px solid #374151; }
+    .stat-card { background: #1f2937; padding: 15px; border-radius: 10px; text-align: center; border: 1px solid #518571; }
     .positive { color: #4ade80; font-weight: bold; }
     .negative { color: #f87171; font-weight: bold; }
 </style>
@@ -223,3 +223,4 @@ with tab3:
         st.dataframe(df_hist, use_container_width=True)
     else:
         st.info("No bets logged yet.")
+
