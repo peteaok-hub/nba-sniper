@@ -1,10 +1,11 @@
 import streamlit as st
 import pandas as pd
-import nba_brain as brain # Imports the Engine
+import nba_brain as brain 
+import os  # <--- FIXED: Added missing import
 import time
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="NBA Sniper V4.0", layout="wide", page_icon="🏀")
+st.set_page_config(page_title="NBA Sniper V4.1", layout="wide", page_icon="🏀")
 
 # --- STYLES ---
 st.markdown("""
@@ -18,7 +19,7 @@ st.markdown("""
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title("🏀 SNIPER V4.0")
+    st.title("🏀 SNIPER V4.1")
     st.markdown("### System Status")
     if st.button("🔄 Force Refresh", type="primary"):
         st.cache_data.clear()
@@ -211,7 +212,8 @@ with tab2:
                     
                 else: st.error("No game logs found.")
     else:
-        st.warning("Could not fetch roster. Try 'Force Refresh' in sidebar.")
+        st.warning("Could not fetch roster. This is likely a Cloud IP block by the NBA.")
+        st.caption("Try hitting 'Force Refresh' in sidebar.")
 
 # ================= TAB 3: WAR ROOM =================
 with tab3:
