@@ -240,7 +240,7 @@ def check_injuries(home_abbr, away_abbr, injury_data, team_map_full):
     return alerts
 
 def get_roster(team_id):
-    """Atomic Roster Fetch: Multi-Layer Fallback with Exponential Backoff & CSV Safety Net."""
+    """Atomic Roster Fetch: Multi-Layer Fallback with Exponential Backoff."""
     
     session = requests.Session()
     session.headers.update(get_headers())
@@ -257,23 +257,29 @@ def get_roster(team_id):
     # Layer 2: Backdoor Stats
     for attempt in range(max_retries):
         try:
+             # Layer 2: Backdoor Stats
             df = leaguedashplayerstats.LeagueDashPlayerStats(team_id_nullable=team_id, season='2024-25', headers=get_headers(), timeout=5).get_data_frames()[0]
-            if not df.empty: return df.rename(columns={'PLAYER_NAME': 'PLAYER', 'PLAYER_ID': 'PLAYER_ID'})
-        except: time.sleep(1)
+            if not df.empty:
+                 return df.rename(columns={'PLAYER_NAME': 'PLAYER', 'PLAYER_ID': 'PLAYER_ID'})
+        except Exception as e:
+             print(f"Roster Layer 2 Attempt {attempt+1} failed: {e}")
+             time.sleep(1 * (attempt + 1))
 
-    # Layer 3: Nuclear (All Players)
     try:
+        # Layer 3: Nuclear (All Players)
         df = commonallplayers.CommonAllPlayers(is_only_current_season=1, headers=get_headers(), timeout=10).get_data_frames()[0]
         return df[df['TEAM_ID'] == team_id].rename(columns={'DISPLAY_FIRST_LAST': 'PLAYER', 'PERSON_ID': 'PLAYER_ID'})
-    except: pass
-
+    except Exception as e:
+        print(f"Roster Layer 3 failed: {e}")
+        pass
+    
     # Layer 4: THE BUNKER (Static CSV Fallback)
     try:
         if os.path.exists(ROSTER_FILE):
             df = pd.read_csv(ROSTER_FILE)
             return df[df['TEAM_ID'] == team_id]
     except: pass
-    
+
     return pd.DataFrame()
 
 def fetch_player_logs(player_id):
