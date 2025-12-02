@@ -212,8 +212,7 @@ with tab2:
                     
                 else: st.error("No game logs found.")
     else:
-        st.warning("Could not fetch roster. This is likely a Cloud IP block by the NBA.")
-        st.caption("Try hitting 'Force Refresh' in sidebar.")
+        st.warning("Could not fetch roster. Try 'Force Refresh' in sidebar.")
 
 # ================= TAB 3: WAR ROOM =================
 with tab3:
