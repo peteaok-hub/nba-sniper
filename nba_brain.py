@@ -1,163 +1,327 @@
+
 import pandas as pd
 import numpy as np
 import requests
+import unicodedata
 import os
 import pickle
+import time
+import random
 from datetime import datetime
+import pytz
+from bs4 import BeautifulSoup
 from sklearn.linear_model import RidgeClassifier
 from sklearn.preprocessing import StandardScaler
+from nba_api.stats.static import teams as nba_teams_static
+from nba_api.stats.endpoints import commonteamroster, playergamelog, leaguedashteamstats, scoreboardv2, leaguedashplayerstats, commonallplayers
 
-# CONFIG
-HISTORY_FILE = "nfl_betting_history.csv"
-DATA_FILE = "nfl_games_processed.csv"
-MODEL_FILE = "nfl_model_v1.pkl"
+# --- 1. CONFIGURATION & CONSTANTS ---
+BRAIN_FILE = "nba_brain.pkl"
+DATA_FILE = "nba_games_rolled.csv"
+HISTORY_FILE = "nba_betting_history.csv" # Added HISTORY_FILE constant here
 
-def heal_data_engine():
-    """Downloads Data & Calculates Momentum"""
-    print("📡 DOWNLOADING FRESH NFL DATA...")
-    URL = "https://github.com/nflverse/nfldata/raw/master/data/games.csv"
+# ODDS API
+ODDS_API_KEY = "3e039d8cfd426d394b020b55bd303a07"
+ODDS_BASE_URL = "https://api.the-odds-api.com/v4/sports/basketball_nba"
+
+# STEALTH HEADERS (Enhanced)
+def get_headers():
+    """Returns randomized headers to mimic real browser behavior."""
+    user_agents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0'
+    ]
+    return {
+        'Host': 'stats.nba.com',
+        'User-Agent': random.choice(user_agents),
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Origin': 'https://www.nba.com',
+        'Referer': 'https://www.nba.com/',
+        'Connection': 'keep-alive',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'cors',
+        'Sec-Fetch-Site': 'same-site',
+        'Pragma': 'no-cache',
+        'Cache-Control': 'no-cache',
+    }
+
+# --- 2. SELF-HEALING & DATA ENGINE ---
+
+def rebuild_brain_engine():
+    print("🧠 INITIALIZING BRAIN REBUILD...")
     try:
-        r = requests.get(URL, timeout=10)
-        with open("nfl_games.csv", "wb") as f: f.write(r.content)
+        url = "https://drive.google.com/uc?export=download&id=1YyNpERG0jqPlpxZvvELaNcMHTiKVpfWe"
+        r = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with open(DATA_FILE, "wb") as f: f.write(r.content)
         
-        # Load & Filter
-        df = pd.read_csv("nfl_games.csv")
-        df = df[df['season'] >= 2020].copy()
-        df['home_margin'] = df['home_score'] - df['away_score']
-        df['away_margin'] = df['away_score'] - df['home_score']
-        df['home_win'] = np.where(df['home_margin'] > 0, 1, 0)
+        df = pd.read_csv(DATA_FILE, parse_dates=["date"]).sort_values("date")
+        code_map = {"NOH":"NOP", "CHO":"CHA", "BRK":"BKN", "PHO":"PHX"}
+        df.replace(code_map, inplace=True)
+        cols_drop = ["mp.1", "mp_opp.1", "index_opp"]
+        df = df.drop(columns=[c for c in cols_drop if c in df.columns])
         
-        # STACKING
-        h_games = df[['game_id', 'season', 'week', 'home_team', 'home_score', 'home_margin', 'gameday', 'gametime']].rename(
-            columns={'home_team': 'team', 'home_score': 'score', 'home_margin': 'margin'})
-        a_games = df[['game_id', 'season', 'week', 'away_team', 'away_score', 'away_margin', 'gameday', 'gametime']].rename(
-            columns={'away_team': 'team', 'away_score': 'score', 'away_margin': 'margin'})
+        df["target"] = df.groupby("team")["won"].shift(-1).fillna(0).astype(int)
         
-        logs = pd.concat([h_games, a_games]).sort_values(['team', 'season', 'week'])
+        numeric = df.select_dtypes(include=[np.number])
+        cols = [c for c in numeric.columns if c not in ["season", "target", "won"]]
+        r10 = df.groupby("team")[cols].rolling(10, min_periods=1).mean().reset_index(0, drop=True)
+        r10.columns = [f"{c}_R10" for c in r10.columns]
         
-        # ROLLING MOMENTUM (L5)
-        logs['roll_margin'] = logs.groupby('team')['margin'].rolling(5, min_periods=1).mean().reset_index(0, drop=True)
-        logs['roll_score'] = logs.groupby('team')['score'].rolling(5, min_periods=1).mean().reset_index(0, drop=True)
+        df = pd.concat([df, r10], axis=1).fillna(0)
+        df.to_csv(DATA_FILE, index=False)
         
-        # PRE-GAME SHIFT
-        logs['pre_margin'] = logs.groupby('team')['roll_margin'].shift(1).fillna(0)
-        logs['pre_score'] = logs.groupby('team')['roll_score'].shift(1).fillna(0)
-        
-        # MERGE
-        h_stats = logs[['game_id', 'team', 'pre_margin', 'pre_score']].rename(
-            columns={'team': 'home_team', 'pre_margin': 'h_mom', 'pre_score': 'h_off'})
-        a_stats = logs[['game_id', 'team', 'pre_margin', 'pre_score']].rename(
-            columns={'team': 'away_team', 'pre_margin': 'a_mom', 'pre_score': 'a_off'})
-            
-        df_final = df.merge(h_stats, on=['game_id', 'home_team'])
-        df_final = df_final.merge(a_stats, on=['game_id', 'away_team'])
-        
-        df_final.to_csv(DATA_FILE, index=False)
-        return df_final
-    except Exception as e:
-        print(f"Data Failure: {e}")
-        return None
-
-def heal_brain_engine():
-    """Retrains Model"""
-    print("🧠 RETRAINING MOMENTUM BRAIN...")
-    if not os.path.exists(DATA_FILE): heal_data_engine()
-        
-    try:
-        df = pd.read_csv(DATA_FILE)
-        features = ['h_mom', 'h_off', 'a_mom', 'a_off']
-        X = df[features]
-        y = df['home_win']
-        
+        features = [c for c in df.columns if "_R10" in c]
+        X, y = df[features], df["target"]
         scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
+        X_sc = scaler.fit_transform(X)
+        model = RidgeClassifier()
+        model.fit(X_sc, y)
         
-        model = RidgeClassifier(alpha=1.0)
-        model.fit(X_scaled, y)
+        pkg = {"model": model, "scaler": scaler, "features": features}
+        with open(BRAIN_FILE, "wb") as f: pickle.dump(pkg, f)
         
-        pkg = {"model": model, "scaler": scaler, "predictors": features}
-        with open(MODEL_FILE, "wb") as f: pickle.dump(pkg, f)
-        return pkg
-    except: return None
+        return df, pkg
+    except Exception as e:
+        print(f"❌ CRITICAL FAILURE: {e}")
+        return None, None
 
-def load_system():
-    if not os.path.exists(DATA_FILE): heal_data_engine()
-    if not os.path.exists(MODEL_FILE): heal_brain_engine()
-    
+def load_brain_engine():
+    if not os.path.exists(DATA_FILE) or not os.path.exists(BRAIN_FILE):
+        return rebuild_brain_engine()
     try:
-        df = pd.read_csv(DATA_FILE)
-        teams = sorted(df['home_team'].unique())
-        with open(MODEL_FILE, "rb") as f: pkg = pickle.load(f)
-        return df, teams, pkg
+        df = pd.read_csv(DATA_FILE, parse_dates=["date"])
+        with open(BRAIN_FILE, "rb") as f: pkg = pickle.load(f)
+        return df, pkg
     except:
-        return None, None, None
+        return rebuild_brain_engine()
 
-def get_momentum(df, team_name):
-    last_home = df[df['home_team'] == team_name].tail(1)
-    last_away = df[df['away_team'] == team_name].tail(1)
-    
-    if not last_home.empty and (last_away.empty or last_home.index[-1] > last_away.index[-1]):
-        return last_home.iloc[0]['h_mom'], last_home.iloc[0]['h_off']
-    elif not last_away.empty:
-        return last_away.iloc[0]['a_mom'], last_away.iloc[0]['a_off']
-    return 0, 0
+# --- 3. INTELLIGENCE MODULES ---
 
-def get_weekly_schedule(df, week):
-    """Fetches the schedule for a specific week to build the War Grid."""
+def get_odds_team_map():
+    return {
+        "Atlanta Hawks": "ATL", "Boston Celtics": "BOS", "Brooklyn Nets": "BKN", "Charlotte Hornets": "CHA",
+        "Chicago Bulls": "CHI", "Cleveland Cavaliers": "CLE", "Dallas Mavericks": "DAL", "Denver Nuggets": "DEN",
+        "Detroit Pistons": "DET", "Golden State Warriors": "GSW", "Houston Rockets": "HOU", "Indiana Pacers": "IND",
+        "Los Angeles Clippers": "LAC", "LA Clippers": "LAC", "Los Angeles Lakers": "LAL", "LA Lakers": "LAL",
+        "Memphis Grizzlies": "MEM", "Miami Heat": "MIA", "Milwaukee Bucks": "MIL", "Minnesota Timberwolves": "MIN",
+        "New Orleans Pelicans": "NOP", "New York Knicks": "NYK", "Oklahoma City Thunder": "OKC", "Orlando Magic": "ORL",
+        "Philadelphia 76ers": "PHI", "Phoenix Suns": "PHX", "Portland Trail Blazers": "POR", "Sacramento Kings": "SAC",
+        "San Antonio Spurs": "SAS", "Toronto Raptors": "TOR", "Utah Jazz": "UTA", "Washington Wizards": "WAS"
+    }
+
+def get_todays_slate():
+    slate = []
+    # 1. Odds API
     try:
-        # Find the latest season in the data
-        current_season = df['season'].max()
-        
-        # Filter for that season and week
-        schedule = df[(df['season'] == current_season) & (df['week'] == week)]
-        # Drop duplicates if multiple entries exist per game
-        schedule = schedule.drop_duplicates(subset=['game_id'])
-        
-        games = []
-        for _, row in schedule.iterrows():
-            games.append({
-                "home": row['home_team'],
-                "away": row['away_team'],
-                "day": row.get('gameday', 'TBD'),
-                "time": row.get('gametime', 'TBD')
-            })
-        return games
+        url = f"{ODDS_BASE_URL}/odds"
+        params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
+        r = requests.get(url, params=params)
+        if r.status_code == 200:
+            data = r.json()
+            mapper = get_odds_team_map()
+            for game in data:
+                h_abbr = mapper.get(game.get('home_team'))
+                a_abbr = mapper.get(game.get('away_team'))
+                if h_abbr and a_abbr: slate.append(f"{a_abbr} @ {h_abbr}")
+            if slate: return list(set(slate))
+    except: pass
+    
+    # 2. NBA API Fallback
+    try:
+        est = pytz.timezone('US/Eastern')
+        today = datetime.now(est).strftime('%Y-%m-%d')
+        board = scoreboardv2.ScoreboardV2(game_date=today, headers=get_headers(), timeout=5)
+        games = board.get_data_frames()[0]
+        if not games.empty:
+            teams = nba_teams_static.get_teams()
+            id_to_abbr = {t['id']: t['abbreviation'] for t in teams}
+            for _, row in games.iterrows():
+                h_abbr = id_to_abbr.get(row['HOME_TEAM_ID'])
+                a_abbr = id_to_abbr.get(row['VISITOR_TEAM_ID'])
+                if h_abbr and a_abbr: slate.append(f"{a_abbr} @ {h_abbr}")
+    except: pass
+    return list(set(slate))
+
+def get_live_odds():
+    try:
+        url = f"{ODDS_BASE_URL}/odds"
+        params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'h2h', 'oddsFormat': 'american'}
+        response = requests.get(url, params=params)
+        if response.status_code == 200: return response.json()
+        return []
     except: return []
 
-# --- FINANCIAL ENGINES ---
-def calculate_kelly(bankroll, win_prob, odds_decimal, fractional=0.25):
-    """Kelly Criterion for Bet Sizing."""
-    if odds_decimal <= 1: return 0, 0
-    b = odds_decimal - 1
-    p = win_prob / 100
-    q = 1 - p
-    f = (b * p - q) / b
-    safe_f = max(0, f) * fractional
-    wager = bankroll * safe_f
-    return wager, safe_f * 100
+# --- 4. PROP SNIPER MODULE ---
 
-def fetch_best_odds(api_key, home, away):
-    """Placeholder for Odds API - Returns structure expected by UI"""
-    # This will be fully implemented in V5 phase 2 to hit the API
-    # For now it returns empty so UI doesn't crash
-    return [] 
+def get_game_id_for_team(team_name):
+    try:
+        url = f"{ODDS_BASE_URL}/events"
+        params = {'apiKey': ODDS_API_KEY}
+        r = requests.get(url, params=params)
+        if r.status_code == 200:
+            for game in r.json():
+                if team_name in game['home_team'] or team_name in game['away_team']:
+                    return game['id']
+    except: pass
+    return None
 
-def log_prediction(week, home, away, winner, confidence, rating, edge, note, wager="0", book="N/A"):
+def get_player_props(game_id, player_name):
+    props = {'PTS': None, 'REB': None, 'AST': None}
+    if not game_id: return props
+    try:
+        url = f"{ODDS_BASE_URL}/events/{game_id}/odds"
+        params = {'apiKey': ODDS_API_KEY, 'regions': 'us', 'markets': 'player_points,player_rebounds,player_assists', 'oddsFormat': 'american'}
+        r = requests.get(url, params=params)
+        if r.status_code == 200:
+            data = r.json()
+            for book in data.get('bookmakers', []):
+                for market in book.get('markets', []):
+                    key = market['key']
+                    p_type = None
+                    if key == 'player_points': p_type = 'PTS'
+                    elif key == 'player_rebounds': p_type = 'REB'
+                    elif key == 'player_assists': p_type = 'AST'
+                    
+                    if p_type and not props[p_type]:
+                        for outcome in market['outcomes']:
+                            if outcome['description'].split()[-1] in player_name:
+                                props[p_type] = outcome['point']
+                                break
+    except: pass
+    return props
+
+# --- 5. ROSTER & INJURY MODULES ---
+
+def normalize_cbs_name(cbs_name):
+    mapping = {
+        "Golden St.": "Golden State Warriors", "L.A. Lakers": "Los Angeles Lakers", "L.A. Clippers": "Los Angeles Clippers",
+        "San Antonio": "San Antonio Spurs", "New York": "New York Knicks", "New Orleans": "New Orleans Pelicans",
+        "Okla. City": "Oklahoma City Thunder", "Utah": "Utah Jazz", "Phoenix": "Phoenix Suns", "Philadelphia": "Philadelphia 76ers",
+        "Miami": "Miami Heat", "Boston": "Boston Celtics", "Atlanta": "Atlanta Hawks", "Brooklyn": "Brooklyn Nets",
+        "Charlotte": "Charlotte Hornets", "Chicago": "Chicago Bulls", "Cleveland": "Cleveland Cavaliers", "Dallas": "Dallas Mavericks",
+        "Denver": "Denver Nuggets", "Detroit": "Detroit Pistons", "Houston": "Houston Rockets", "Indiana": "Indiana Pacers",
+        "Memphis": "Memphis Grizzlies", "Milwaukee": "Milwaukee Bucks", "Minnesota": "Minnesota Timberwolves", "Orlando": "Orlando Magic",
+        "Portland": "Portland Trail Blazers", "Sacramento": "Sacramento Kings", "Toronto": "Toronto Raptors", "Washington": "Washington Wizards"
+    }
+    return mapping.get(cbs_name, cbs_name)
+
+def get_injury_report():
+    try:
+        url = "https://www.cbssports.com/nba/injuries/"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        injuries = {}
+        for section in soup.find_all('div', class_='TeamLogoNameLockup'):
+            name_tag = section.find('span', class_='TeamLogoNameLockup-name')
+            if not name_tag: continue
+            clean_name = normalize_cbs_name(section.find('a').text.strip())
+            parent = section.find_parent('div', class_='TableBase')
+            if not parent: continue
+            rows = parent.find_all('tr', class_='TableBase-bodyTr')
+            team_inj = []
+            for row in rows:
+                cols = row.find_all('td')
+                if len(cols) >= 5:
+                    team_inj.append({
+                        'player': cols[0].find('span', class_='CellPlayerName--long').text.strip(),
+                        'status': cols[4].text.strip(),
+                        'injury': cols[3].text.strip()
+                    })
+            injuries[clean_name] = team_inj
+        return injuries
+    except: return {}
+
+def check_injuries(home_abbr, away_abbr, injury_data, team_map_full):
+    alerts = []
+    abbr_to_full = {v: k for k, v in team_map_full.items()}
+    for abbr in [home_abbr, away_abbr]:
+        full_name = abbr_to_full.get(abbr)
+        if full_name and full_name in injury_data:
+            for inj in injury_data[full_name]:
+                icon = "🔴" if "Out" in inj['status'] else "🟡"
+                alerts.append(f"{icon} **{abbr}** - {inj['player']}: {inj['injury']} ({inj['status']})")
+    return alerts
+
+def get_roster(team_id):
+    """Atomic Roster Fetch: Multi-Layer Fallback with Exponential Backoff."""
+    
+    # Initialize a session for persistent connections
+    session = requests.Session()
+    session.headers.update(get_headers())
+
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            # Layer 1: Official
+            roster = commonteamroster.CommonTeamRoster(team_id=team_id, season='2024-25', headers=get_headers(), timeout=5)
+            df = roster.get_data_frames()[0]
+            if not df.empty: return df
+        except Exception as e:
+            print(f"Roster Layer 1 Attempt {attempt+1} failed: {e}")
+            time.sleep(1 * (attempt + 1)) # Backoff
+    
+    for attempt in range(max_retries):
+        try:
+             # Layer 2: Backdoor Stats
+            df = leaguedashplayerstats.LeagueDashPlayerStats(team_id_nullable=team_id, season='2024-25', headers=get_headers(), timeout=5).get_data_frames()[0]
+            if not df.empty:
+                 return df.rename(columns={'PLAYER_NAME': 'PLAYER', 'PLAYER_ID': 'PLAYER_ID'})
+        except Exception as e:
+             print(f"Roster Layer 2 Attempt {attempt+1} failed: {e}")
+             time.sleep(1 * (attempt + 1))
+
+    try:
+        # Layer 3: Nuclear (All Players)
+        df = commonallplayers.CommonAllPlayers(is_only_current_season=1, headers=get_headers(), timeout=10).get_data_frames()[0]
+        return df[df['TEAM_ID'] == team_id].rename(columns={'DISPLAY_FIRST_LAST': 'PLAYER', 'PERSON_ID': 'PLAYER_ID'})
+    except Exception as e:
+        print(f"Roster Layer 3 failed: {e}")
+        pass
+    
+    return pd.DataFrame()
+
+def fetch_player_logs(player_id):
+    try:
+        log = playergamelog.PlayerGameLog(player_id=player_id, season='2024-25', headers=get_headers(), timeout=10)
+        df = log.get_data_frames()[0]
+        df['PRA'] = df['PTS'] + df['REB'] + df['AST']
+        df['LOCATION'] = np.where(df['MATCHUP'].str.contains('@'), 'AWAY', 'HOME')
+        return df
+    except: return pd.DataFrame()
+
+def get_defense_rankings():
+    try:
+        dash = leaguedashteamstats.LeagueDashTeamStats(measure_type_detailed_defense='Opponent', per_mode_detailed='PerGame', headers=get_headers())
+        df = dash.get_data_frames()[0]
+        df['PTS_RANK'] = df['OPP_PTS'].rank(ascending=False)
+        return df[['TEAM_NAME', 'TEAM_ID', 'PTS_RANK']]
+    except: return pd.DataFrame()
+
+def get_team_map():
+    return {t['full_name']: t['abbreviation'] for t in nba_teams_static.get_teams()}
+
+# --- TELEMETRY ---
+def log_prediction(player, stat_type, line, projection, decision, edge, tags):
     try:
         new_rec = {
             "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-            "Week": f"Week {week}",
-            "Matchup": f"{away} @ {home}",
-            "Pick": winner,
-            "Conf": f"{confidence:.1f}%",
-            "Edge": f"{edge:+.1f}%",
-            "Rating": rating,
-            "Wager": wager,
-            "Book": book,
-            "Note": note
+            "Player": player,
+            "Stat": stat_type,
+            "Line": line,
+            "Proj": projection,
+            "Pick": decision,
+            "Edge": f"{edge:+.1f}",
+            "Tags": tags,
+            "Result": "Pending"
         }
         if os.path.exists(HISTORY_FILE): df = pd.read_csv(HISTORY_FILE)
         else: df = pd.DataFrame(columns=new_rec.keys())
         df = pd.concat([df, pd.DataFrame([new_rec])], ignore_index=True)
         df.to_csv(HISTORY_FILE, index=False)
-    except: pass
+        return True
+    except: return False
