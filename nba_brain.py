@@ -29,7 +29,6 @@ def train_nba_model():
     
     try:
         # We use simple Heuristic Training for V5.0 stability
-        # Real regression training requires 1000+ rows of data
         model_win = RidgeClassifier()
         model_spread = Ridge()
         model_total = Ridge()
@@ -75,13 +74,8 @@ def get_matchup_projection(home, away):
     Calculates the 'True Line' based on Momentum.
     Returns: {win_prob, projected_spread, projected_total}
     """
-    # In a real scenario, we pull these from the 'nba_games_processed.csv'
-    # For V5.0, we simulate the 'Momentum' calculation
     
     # Simulate Momentum (Replace with real lookup in V5.1)
-    # This logic creates consistent predictions based on team strength names
-    # e.g., BOS is strong, DET is weak
-    
     tier_1 = ["BOS", "DEN", "OKC", "MIN", "LAC"] # +10 Momentum
     tier_2 = ["MIL", "PHX", "NYK", "CLE", "DAL", "MIA"] # +5 Momentum
     tier_3 = ["LAL", "GSW", "SAC", "IND", "NOP", "ORL"] # +0 Momentum
@@ -98,19 +92,14 @@ def get_matchup_projection(home, away):
     a_rat = get_rating(away)
     
     # 1. SPREAD CALCULATION
-    # If Home is +13 and Away is +5, Spread should be Home -8
     raw_spread = a_rat - h_rat # Negative means Home Favorite
     
     # 2. TOTAL CALCULATION
-    # Baseline NBA total is roughly 230
-    # Adjust based on if teams are "Tier 1" (Good defense usually) or "Tier 3" (Fast pace)
     base_total = 230
     if home in tier_1 or away in tier_1: base_total -= 4 # Better defense
     if home in tier_3 or away in tier_3: base_total += 4 # Faster pace
     
     # 3. WIN PROBABILITY
-    # Sigmoid function of the spread
-    # Spread of -8 (Home Fav) -> High Win Prob
     win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
     
     return {
@@ -126,11 +115,11 @@ def get_todays_games():
     return [
         {"home": "IND", "away": "DEN", "time": "7:00 PM"},
         {"home": "CLE", "away": "POR", "time": "7:00 PM"},
-        {"home": "MIA", "away": "DET", "time": "7:30 PM"},
         {"home": "NYK", "away": "CHA", "time": "7:30 PM"},
         {"home": "CHI", "away": "BKN", "time": "8:00 PM"},
         {"home": "HOU", "away": "SAC", "time": "8:00 PM"},
-        {"home": "DAL", "away": "OKC", "time": "8:30 PM"},
+        # FIXED: Changed OKC to MIA to match Hard Rock Feed
+        {"home": "DAL", "away": "MIA", "time": "8:30 PM"},
     ]
 
 def log_transaction(matchup, pick, wager, result="Pending"):
