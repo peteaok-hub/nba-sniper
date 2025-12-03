@@ -6,7 +6,7 @@ import time
 # CONFIG
 st.set_page_config(page_title="SNIPER V4.1", page_icon="🏀", layout="wide")
 
-# STYLES (The Mint Green Theme from Screenshot)
+# STYLES (The Mint Green Theme)
 st.markdown("""
 <style>
     .stApp { background-color: #1e1e1e; color: white; }
@@ -27,13 +27,14 @@ with st.sidebar:
         st.cache_resource.clear()
         st.rerun()
 
-    st.info("System Online: Autonomous Mode")
+    st.info("System Online: Rebirth Protocol Active")
 
 # LOAD BRAIN (The Fix)
 try:
     df_games, pkg = brain.load_brain_engine()
     model = pkg.get('model')
 except Exception as e:
+    # If this triggers, it means nba_brain.py is STILL missing or broken
     st.error(f"Critical Brain Failure: {e}")
     st.stop()
 
@@ -73,7 +74,6 @@ with tab1:
             time.sleep(1) # Dramatic pause
             
             # Prediction Logic (Placeholder for V4.1 stability)
-            # In V5 we use the actual model prediction
             import random
             winner = home if random.random() > 0.5 else away
             conf = random.randint(55, 85)
@@ -91,7 +91,7 @@ with tab1:
 with tab2:
     st.markdown("### 🎯 Player Props")
     st.info("Prop Sniper module is initializing...")
-    # Add prop logic here later
+    # Future V5 integration point
 
 # 3. WAR ROOM
 with tab3:
