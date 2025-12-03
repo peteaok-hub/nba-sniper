@@ -16,6 +16,7 @@ def update_nba_data():
     """Creates a placeholder database if none exists to prevent crashes."""
     if not os.path.exists(DATA_FILE):
         print("🏀 REBIRTH: INITIALIZING NBA DATABASE...")
+        # Create a dummy structure if file is missing to prevent crash
         cols = ['game_id', 'date', 'home_team', 'away_team', 'home_score', 'away_score', 'h_mom', 'a_mom']
         df = pd.DataFrame(columns=cols)
         df.to_csv(DATA_FILE, index=False)
