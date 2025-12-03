@@ -2,100 +2,103 @@ import streamlit as st
 import pandas as pd
 import nba_brain as brain
 import time
-import os  # <--- THIS WAS MISSING
+import os
 
 # CONFIG
-st.set_page_config(page_title="SNIPER V4.1", page_icon="🏀", layout="wide")
+st.set_page_config(page_title="SNIPER V5.0", page_icon="🏀", layout="wide")
 
-# STYLES (The Mint Green Theme)
+# STYLES (Hard Rock / Mint Theme)
 st.markdown("""
 <style>
-    .stApp { background-color: #1e1e1e; color: white; }
-    .main-header { background-color: #76E4C6; padding: 20px; border-radius: 10px; color: #333; }
-    .metric-card { background-color: #333; padding: 15px; border-radius: 8px; border: 1px solid #555; text-align: center; }
-    .highlight { color: #76E4C6; font-weight: bold; }
-    .success-box { background-color: #76E4C6; color: black; padding: 10px; border-radius: 5px; margin-top: 10px; }
-    div.stButton > button { background-color: #FF4B4B; color: white; border: none; }
+    .stApp { background-color: #121212; color: white; }
+    .hr-header { 
+        background: linear-gradient(90deg, #7b2cbf, #9d4edd); 
+        padding: 15px; border-radius: 8px; text-align: center; color: white; font-weight: bold;
+        margin-bottom: 20px;
+    }
+    .game-row { 
+        background-color: #1e1e1e; border: 1px solid #333; padding: 15px; 
+        border-radius: 10px; margin-bottom: 10px;
+    }
+    .sniper-edge { color: #00ff00; font-weight: bold; }
+    .book-line { color: #aaa; font-size: 0.9em; }
+    div.stButton > button { background-color: #7b2cbf; color: white; border: none; width: 100%; }
 </style>
 """, unsafe_allow_html=True)
 
-# SIDEBAR
-with st.sidebar:
-    st.title("🏀 SNIPER V4.1")
-    st.markdown("### System Status")
-    
-    if st.button("🔄 Force Refresh"):
-        st.cache_resource.clear()
-        st.rerun()
-
-    st.info("System Online: Rebirth Protocol Active")
-
-# LOAD BRAIN (The Fix)
+# LOAD BRAIN
 try:
     df_games, pkg = brain.load_brain_engine()
-    model = pkg.get('model')
 except Exception as e:
-    st.error(f"Critical Brain Failure: {e}")
+    st.error(f"Brain Offline: {e}")
     st.stop()
 
-# --- MAIN TABS ---
-tab1, tab2, tab3 = st.tabs(["🏆 GAME PREDICTOR", "📊 PROP SNIPER", "📜 WAR ROOM"])
+# SIDEBAR
+with st.sidebar:
+    st.title("🏀 SNIPER V5.0")
+    st.caption("Hard Rock Protocol Active")
+    if st.button("🔄 Refresh Markets"): st.rerun()
 
-# 1. GAME PREDICTOR
-with tab1:
-    st.markdown('<div class="main-header"><h3>Daily Matchups</h3></div>', unsafe_allow_html=True)
-    st.write("")
+# --- HEADER ---
+st.markdown('<div class="hr-header"><h3>HARD ROCK HUNTER BOARD</h3></div>', unsafe_allow_html=True)
+
+# --- GAME GRID ---
+games = brain.get_todays_games()
+
+# HEADERS
+c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+c1.write("**MATCHUP**")
+c2.write("**SPREAD (Edge)**")
+c3.write("**TOTAL (Edge)**")
+c4.write("**WINNER**")
+
+for g in games:
+    # 1. GET PROJECTION
+    proj = brain.get_matchup_projection(g['home'], g['away'])
     
-    games = brain.get_todays_games()
-    
-    if not games:
-        st.warning("⚠️ No games detected for today (US/Eastern). Using Custom Mode.")
+    # 2. UI ROW
+    with st.container():
+        st.markdown("---")
+        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
         
-        c1, c2 = st.columns(2)
-        with c1: home = st.selectbox("Home", ["LAL", "BOS", "MIA", "NYK", "GSW", "PHX", "ATL", "BKN"])
-        with c2: away = st.selectbox("Away", ["LAL", "BOS", "MIA", "NYK", "GSW", "PHX", "ATL", "BKN"], index=1)
-    else:
-        # Create a selection grid
-        game_options = [f"{g['away']} @ {g['home']} ({g['time']})" for g in games]
-        selected_game_str = st.selectbox("Select Matchup", game_options)
+        # COL 1: Matchup info
+        with c1:
+            st.write(f"**{g['away']} @ {g['home']}**")
+            st.caption(f"Time: {g['time']}")
         
-        # Parse selection
-        parts = selected_game_str.split(" @ ")
-        away = parts[0]
-        home = parts[1].split(" (")[0]
-
-    st.markdown(f"### 🏟️ Matchup: {away} (Away) @ {home} (Home)")
-    
-    if st.checkbox("CLEAN SLATE: No major injuries reported.", value=True):
-        st.caption("Injury filter active.")
-
-    if st.button("PREDICT WINNER"):
-        with st.spinner("Running simulation..."):
-            time.sleep(1) # Dramatic pause
+        # COL 2: Spread Analysis
+        with c2:
+            # We simulate a 'Book Line' for demo purposes (User would see this on Hard Rock)
+            # In V5.1 we fetch this via API. For now, we assume book is close to 'Fair'
+            book_spread = round(proj['projected_spread'] + (0.5 if proj['projected_spread'] > 0 else -0.5)) 
+            my_spread = round(proj['projected_spread'], 1)
             
-            # Prediction Logic (Placeholder for V4.1 stability)
-            import random
-            winner = home if random.random() > 0.5 else away
-            conf = random.randint(55, 85)
+            # Calculate Edge
+            diff = abs(my_spread - book_spread)
+            color = "green" if diff >= 2.0 else "white"
             
-            st.markdown(f"""
-            <div class="success-box">
-                <h2 style="margin:0">WINNER: {winner}</h2>
-                <p style="margin:0">Confidence: {conf}%</p>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f"<span style='color:{color}'>{my_spread}</span>", unsafe_allow_html=True)
+            st.caption(f"Book: {book_spread}")
+
+        # COL 3: Total Analysis
+        with c3:
+            book_total = 230.0 # Standard placeholder
+            my_total = round(proj['projected_total'], 1)
             
-            brain.log_transaction(f"{away} @ {home}", winner, "1.0u")
+            diff_t = abs(my_total - book_total)
+            color_t = "green" if diff_t >= 4.0 else "white"
+            
+            st.markdown(f"<span style='color:{color_t}'>{my_total}</span>", unsafe_allow_html=True)
+            st.caption(f"Book: {book_total}")
+            
+        # COL 4: Winner / Action
+        with c4:
+            winner = g['home'] if proj['win_prob'] > 50 else g['away']
+            conf = int(proj['win_prob']) if winner == g['home'] else int(100 - proj['win_prob'])
+            
+            if st.button(f"Bet {winner}", key=f"btn_{g['home']}"):
+                brain.log_transaction(f"{g['away']} @ {g['home']}", winner, "1u")
+                st.toast(f"Logged: {winner} ({conf}%)")
 
-# 2. PROP SNIPER
-with tab2:
-    st.markdown("### 🎯 Player Props")
-    st.info("Prop Sniper module is initializing...")
-
-# 3. WAR ROOM
-with tab3:
-    st.markdown("### 📜 Betting Ledger")
-    if os.path.exists(brain.HISTORY_FILE):
-        st.dataframe(pd.read_csv(brain.HISTORY_FILE))
-    else:
-        st.write("No history found.")
+st.markdown("---")
+st.caption("Green numbers indicate a significant edge (>2pts Spread, >4pts Total) against the book.")

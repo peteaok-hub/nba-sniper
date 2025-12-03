@@ -3,7 +3,7 @@ import numpy as np
 import os
 import pickle
 from datetime import datetime
-from sklearn.linear_model import RidgeClassifier
+from sklearn.linear_model import RidgeClassifier, Ridge
 from sklearn.preprocessing import StandardScaler
 
 # CONFIG
@@ -11,75 +11,129 @@ DATA_FILE = "nba_games_processed.csv"
 MODEL_FILE = "nba_model_v1.pkl"
 HISTORY_FILE = "nba_betting_ledger.csv"
 
-# --- 1. DATA ENGINE (SELF-HEALING) ---
+# --- 1. DATA ENGINE ---
 def update_nba_data():
-    """Creates a placeholder database if none exists to prevent crashes."""
+    """Creates a placeholder database if none exists."""
     if not os.path.exists(DATA_FILE):
         print("🏀 REBIRTH: INITIALIZING NBA DATABASE...")
-        cols = ['game_id', 'date', 'home_team', 'away_team', 'home_score', 'away_score', 'h_mom', 'a_mom']
+        cols = ['game_id', 'date', 'home_team', 'away_team', 'home_score', 'away_score', 'h_mom', 'a_mom', 'h_off', 'a_off']
         df = pd.DataFrame(columns=cols)
         df.to_csv(DATA_FILE, index=False)
         return df
     return pd.read_csv(DATA_FILE)
 
-# --- 2. BRAIN ENGINE (LOGIC) ---
+# --- 2. BRAIN ENGINE ---
 def train_nba_model():
-    """Initializes or Retrains the Prediction Model."""
+    """Trains Winner, Spread, and Total models."""
     if not os.path.exists(DATA_FILE): update_nba_data()
     
     try:
-        # Create a basic model structure so the app has something to load
-        model = RidgeClassifier()
+        # We use simple Heuristic Training for V5.0 stability
+        # Real regression training requires 1000+ rows of data
+        model_win = RidgeClassifier()
+        model_spread = Ridge()
+        model_total = Ridge()
         scaler = StandardScaler()
         
-        # Mock training to ensure the object is valid (prevents sklearn 'not fitted' errors)
-        X_mock = np.array([[0,0], [1,1]])
-        y_mock = np.array([0, 1])
-        model.fit(X_mock, y_mock)
+        # Mock fit to ensure objects exist
+        X_mock = np.array([[0,0], [10,10]])
+        y_win = np.array([0, 1])
+        y_spread = np.array([-5, 5])
+        y_total = np.array([200, 220])
         
-        pkg = {"model": model, "scaler": scaler}
+        model_win.fit(X_mock, y_win)
+        model_spread.fit(X_mock, y_spread)
+        model_total.fit(X_mock, y_total)
+        
+        pkg = {
+            "model_win": model_win,
+            "model_spread": model_spread, 
+            "model_total": model_total,
+            "scaler": scaler
+        }
         with open(MODEL_FILE, "wb") as f: pickle.dump(pkg, f)
         return pkg
     except Exception as e:
         print(f"Training Error: {e}")
         return None
 
-# --- 3. THE CRITICAL CONNECTOR (FIXED) ---
 def load_brain_engine():
-    """
-    The function that was missing. 
-    It safely loads Data and Model, rebuilding them if they are missing.
-    """
-    # 1. Ensure Data Exists
-    if not os.path.exists(DATA_FILE):
-        df = update_nba_data()
-    else:
-        df = pd.read_csv(DATA_FILE)
-        
-    # 2. Ensure Model Exists
-    if not os.path.exists(MODEL_FILE):
+    """Loads the Intelligence Package."""
+    if not os.path.exists(DATA_FILE): update_nba_data()
+    if not os.path.exists(MODEL_FILE): train_nba_model()
+    
+    try:
+        with open(MODEL_FILE, "rb") as f: pkg = pickle.load(f)
+        return pd.read_csv(DATA_FILE), pkg
+    except:
         pkg = train_nba_model()
-    else:
-        try:
-            with open(MODEL_FILE, "rb") as f: pkg = pickle.load(f)
-        except:
-            pkg = train_nba_model() # Rebuild if corrupt
-            
-    return df, pkg
+        return pd.read_csv(DATA_FILE), pkg
+
+# --- 3. PREDICTION LOGIC (THE HARD ROCK HUNTER) ---
+def get_matchup_projection(home, away):
+    """
+    Calculates the 'True Line' based on Momentum.
+    Returns: {win_prob, projected_spread, projected_total}
+    """
+    # In a real scenario, we pull these from the 'nba_games_processed.csv'
+    # For V5.0, we simulate the 'Momentum' calculation
+    
+    # Simulate Momentum (Replace with real lookup in V5.1)
+    # This logic creates consistent predictions based on team strength names
+    # e.g., BOS is strong, DET is weak
+    
+    tier_1 = ["BOS", "DEN", "OKC", "MIN", "LAC"] # +10 Momentum
+    tier_2 = ["MIL", "PHX", "NYK", "CLE", "DAL", "MIA"] # +5 Momentum
+    tier_3 = ["LAL", "GSW", "SAC", "IND", "NOP", "ORL"] # +0 Momentum
+    tier_4 = ["HOU", "ATL", "BKN", "UTA", "CHI"] # -5 Momentum
+    
+    def get_rating(team):
+        if team in tier_1: return 10
+        if team in tier_2: return 5
+        if team in tier_3: return 0
+        if team in tier_4: return -5
+        return -8 # Tier 5 (DET, WAS, etc)
+
+    h_rat = get_rating(home) + 3 # Home Court Advantage
+    a_rat = get_rating(away)
+    
+    # 1. SPREAD CALCULATION
+    # If Home is +13 and Away is +5, Spread should be Home -8
+    raw_spread = a_rat - h_rat # Negative means Home Favorite
+    
+    # 2. TOTAL CALCULATION
+    # Baseline NBA total is roughly 230
+    # Adjust based on if teams are "Tier 1" (Good defense usually) or "Tier 3" (Fast pace)
+    base_total = 230
+    if home in tier_1 or away in tier_1: base_total -= 4 # Better defense
+    if home in tier_3 or away in tier_3: base_total += 4 # Faster pace
+    
+    # 3. WIN PROBABILITY
+    # Sigmoid function of the spread
+    # Spread of -8 (Home Fav) -> High Win Prob
+    win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
+    
+    return {
+        "projected_spread": raw_spread,
+        "projected_total": base_total,
+        "win_prob": win_prob
+    }
 
 # --- 4. UTILITIES ---
 def get_todays_games():
-    """Returns today's schedule."""
+    """Returns games matching the Hard Rock screenshot style."""
     today = datetime.now().strftime("%Y-%m-%d")
     return [
-        {"home": "LAL", "away": "BOS", "time": "7:30 PM", "date": today},
-        {"home": "MIA", "away": "NYK", "time": "8:00 PM", "date": today},
-        {"home": "GSW", "away": "PHX", "time": "10:00 PM", "date": today},
-        {"home": "ATL", "away": "BKN", "time": "7:00 PM", "date": today},
+        {"home": "IND", "away": "DEN", "time": "7:00 PM"},
+        {"home": "CLE", "away": "POR", "time": "7:00 PM"},
+        {"home": "MIA", "away": "DET", "time": "7:30 PM"},
+        {"home": "NYK", "away": "CHA", "time": "7:30 PM"},
+        {"home": "CHI", "away": "BKN", "time": "8:00 PM"},
+        {"home": "HOU", "away": "SAC", "time": "8:00 PM"},
+        {"home": "DAL", "away": "OKC", "time": "8:30 PM"},
     ]
 
 def log_transaction(matchup, pick, wager, result="Pending"):
-    """Logs bets to the War Room ledger."""
     try:
         new_rec = {
             "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
