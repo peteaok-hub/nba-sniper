@@ -1,104 +1,138 @@
-import streamlit as st
 import pandas as pd
-import nba_brain as brain
-import time
+import numpy as np
 import os
+import pickle
+from datetime import datetime
+from sklearn.linear_model import RidgeClassifier, Ridge
+from sklearn.preprocessing import StandardScaler
 
 # CONFIG
-st.set_page_config(page_title="SNIPER V5.0", page_icon="🏀", layout="wide")
+DATA_FILE = "nba_games_processed.csv"
+MODEL_FILE = "nba_model_v1.pkl"
+HISTORY_FILE = "nba_betting_ledger.csv"
 
-# STYLES (Hard Rock / Mint Theme)
-st.markdown("""
-<style>
-    .stApp { background-color: #121212; color: white; }
-    .hr-header { 
-        background: linear-gradient(90deg, #7b2cbf, #9d4edd); 
-        padding: 15px; border-radius: 8px; text-align: center; color: white; font-weight: bold;
-        margin-bottom: 20px;
-    }
-    .game-row { 
-        background-color: #1e1e1e; border: 1px solid #333; padding: 15px; 
-        border-radius: 10px; margin-bottom: 10px;
-    }
-    .sniper-edge { color: #00ff00; font-weight: bold; }
-    .book-line { color: #aaa; font-size: 0.9em; }
-    div.stButton > button { background-color: #7b2cbf; color: white; border: none; width: 100%; }
-</style>
-""", unsafe_allow_html=True)
+# --- 1. DATA ENGINE ---
+def update_nba_data():
+    """Creates a placeholder database if none exists."""
+    if not os.path.exists(DATA_FILE):
+        print("🏀 REBIRTH: INITIALIZING NBA DATABASE...")
+        cols = ['game_id', 'date', 'home_team', 'away_team', 'home_score', 'away_score', 'h_mom', 'a_mom', 'h_off', 'a_off']
+        df = pd.DataFrame(columns=cols)
+        df.to_csv(DATA_FILE, index=False)
+        return df
+    return pd.read_csv(DATA_FILE)
 
-# LOAD BRAIN
-try:
-    df_games, pkg = brain.load_brain_engine()
-except Exception as e:
-    st.error(f"Brain Offline: {e}")
-    st.stop()
-
-# SIDEBAR
-with st.sidebar:
-    st.title("🏀 SNIPER V5.0")
-    st.caption("Hard Rock Protocol Active")
-    if st.button("🔄 Refresh Markets"): st.rerun()
-
-# --- HEADER ---
-st.markdown('<div class="hr-header"><h3>HARD ROCK HUNTER BOARD</h3></div>', unsafe_allow_html=True)
-
-# --- GAME GRID ---
-games = brain.get_todays_games()
-
-# HEADERS
-c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-c1.write("**MATCHUP**")
-c2.write("**SPREAD (Edge)**")
-c3.write("**TOTAL (Edge)**")
-c4.write("**WINNER**")
-
-for g in games:
-    # 1. GET PROJECTION
-    proj = brain.get_matchup_projection(g['home'], g['away'])
+# --- 2. BRAIN ENGINE ---
+def train_nba_model():
+    """Trains Winner, Spread, and Total models."""
+    if not os.path.exists(DATA_FILE): update_nba_data()
     
-    # 2. UI ROW
-    with st.container():
-        st.markdown("---")
-        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+    try:
+        # We use simple Heuristic Training for V5.0 stability
+        model_win = RidgeClassifier()
+        model_spread = Ridge()
+        model_total = Ridge()
+        scaler = StandardScaler()
         
-        # COL 1: Matchup info
-        with c1:
-            st.write(f"**{g['away']} @ {g['home']}**")
-            st.caption(f"Time: {g['time']}")
+        # Mock fit to ensure objects exist
+        X_mock = np.array([[0,0], [10,10]])
+        y_win = np.array([0, 1])
+        y_spread = np.array([-5, 5])
+        y_total = np.array([200, 220])
         
-        # COL 2: Spread Analysis
-        with c2:
-            # We simulate a 'Book Line' for demo purposes (User would see this on Hard Rock)
-            # In V5.1 we fetch this via API. For now, we assume book is close to 'Fair'
-            book_spread = round(proj['projected_spread'] + (0.5 if proj['projected_spread'] > 0 else -0.5)) 
-            my_spread = round(proj['projected_spread'], 1)
-            
-            # Calculate Edge
-            diff = abs(my_spread - book_spread)
-            color = "green" if diff >= 2.0 else "white"
-            
-            st.markdown(f"<span style='color:{color}'>{my_spread}</span>", unsafe_allow_html=True)
-            st.caption(f"Book: {book_spread}")
+        model_win.fit(X_mock, y_win)
+        model_spread.fit(X_mock, y_spread)
+        model_total.fit(X_mock, y_total)
+        
+        pkg = {
+            "model_win": model_win,
+            "model_spread": model_spread, 
+            "model_total": model_total,
+            "scaler": scaler
+        }
+        with open(MODEL_FILE, "wb") as f: pickle.dump(pkg, f)
+        return pkg
+    except Exception as e:
+        print(f"Training Error: {e}")
+        return None
 
-        # COL 3: Total Analysis
-        with c3:
-            book_total = 230.0 # Standard placeholder
-            my_total = round(proj['projected_total'], 1)
-            
-            diff_t = abs(my_total - book_total)
-            color_t = "green" if diff_t >= 4.0 else "white"
-            
-            st.markdown(f"<span style='color:{color_t}'>{my_total}</span>", unsafe_allow_html=True)
-            st.caption(f"Book: {book_total}")
-            
-        # COL 4: Winner / Action
-        with c4:
-            winner = g['home'] if proj['win_prob'] > 50 else g['away']
-            conf = int(proj['win_prob']) if winner == g['home'] else int(100 - proj['win_prob'])
-            
-            if st.button(f"Bet {winner}", key=f"btn_{g['home']}"):
-                brain.log_transaction(f"{g['away']} @ {g['home']}", winner, "1u")
-                st.toast(f"Logged: {winner} ({conf}%)")
+def load_brain_engine():
+    """Loads the Intelligence Package."""
+    if not os.path.exists(DATA_FILE): update_nba_data()
+    if not os.path.exists(MODEL_FILE): train_nba_model()
+    
+    try:
+        with open(MODEL_FILE, "rb") as f: pkg = pickle.load(f)
+        return pd.read_csv(DATA_FILE), pkg
+    except:
+        pkg = train_nba_model()
+        return pd.read_csv(DATA_FILE), pkg
 
-st.markdown("---")
-st.caption("Green numbers indicate a significant edge (>2pts Spread, >4pts Total) against the book.")
+# --- 3. PREDICTION LOGIC (THE HARD ROCK HUNTER) ---
+def get_matchup_projection(home, away):
+    """
+    Calculates the 'True Line' based on Momentum.
+    Returns: {win_prob, projected_spread, projected_total}
+    """
+    
+    # Simulate Momentum (Replace with real lookup in V5.1)
+    tier_1 = ["BOS", "DEN", "OKC", "MIN", "LAC"] # +10 Momentum
+    tier_2 = ["MIL", "PHX", "NYK", "CLE", "DAL", "MIA"] # +5 Momentum
+    tier_3 = ["LAL", "GSW", "SAC", "IND", "NOP", "ORL"] # +0 Momentum
+    tier_4 = ["HOU", "ATL", "BKN", "UTA", "CHI"] # -5 Momentum
+    
+    def get_rating(team):
+        if team in tier_1: return 10
+        if team in tier_2: return 5
+        if team in tier_3: return 0
+        if team in tier_4: return -5
+        return -8 # Tier 5 (DET, WAS, etc)
+
+    h_rat = get_rating(home) + 3 # Home Court Advantage
+    a_rat = get_rating(away)
+    
+    # 1. SPREAD CALCULATION
+    raw_spread = a_rat - h_rat # Negative means Home Favorite
+    
+    # 2. TOTAL CALCULATION
+    base_total = 230
+    if home in tier_1 or away in tier_1: base_total -= 4 # Better defense
+    if home in tier_3 or away in tier_3: base_total += 4 # Faster pace
+    
+    # 3. WIN PROBABILITY
+    win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
+    
+    return {
+        "projected_spread": raw_spread,
+        "projected_total": base_total,
+        "win_prob": win_prob
+    }
+
+# --- 4. UTILITIES ---
+def get_todays_games():
+    """Returns games matching the Hard Rock screenshot style."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return [
+        {"home": "IND", "away": "DEN", "time": "7:00 PM"},
+        {"home": "CLE", "away": "POR", "time": "7:00 PM"},
+        {"home": "NYK", "away": "CHA", "time": "7:30 PM"},
+        {"home": "CHI", "away": "BKN", "time": "8:00 PM"},
+        {"home": "HOU", "away": "SAC", "time": "8:00 PM"},
+        # FIXED: Changed OKC to MIA to match Hard Rock Feed
+        {"home": "DAL", "away": "MIA", "time": "8:30 PM"},
+    ]
+
+def log_transaction(matchup, pick, wager, result="Pending"):
+    try:
+        new_rec = {
+            "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "Matchup": matchup,
+            "Pick": pick,
+            "Wager": wager,
+            "Result": result
+        }
+        if os.path.exists(HISTORY_FILE): df = pd.read_csv(HISTORY_FILE)
+        else: df = pd.DataFrame(columns=new_rec.keys())
+        df = pd.concat([df, pd.DataFrame([new_rec])], ignore_index=True)
+        df.to_csv(HISTORY_FILE, index=False)
+    except: pass
