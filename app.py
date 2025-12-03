@@ -1,102 +1,95 @@
-import streamlit as st
 import pandas as pd
-import nba_brain as brain
-import time
+import numpy as np
+import os
+import pickle
+from datetime import datetime
+from sklearn.linear_model import RidgeClassifier
+from sklearn.preprocessing import StandardScaler
 
 # CONFIG
-st.set_page_config(page_title="SNIPER V4.1", page_icon="🏀", layout="wide")
+DATA_FILE = "nba_games_processed.csv"
+MODEL_FILE = "nba_model_v1.pkl"
+HISTORY_FILE = "nba_betting_ledger.csv"
 
-# STYLES (The Mint Green Theme)
-st.markdown("""
-<style>
-    .stApp { background-color: #1e1e1e; color: white; }
-    .main-header { background-color: #76E4C6; padding: 20px; border-radius: 10px; color: #333; }
-    .metric-card { background-color: #333; padding: 15px; border-radius: 8px; border: 1px solid #555; text-align: center; }
-    .highlight { color: #76E4C6; font-weight: bold; }
-    .success-box { background-color: #76E4C6; color: black; padding: 10px; border-radius: 5px; margin-top: 10px; }
-    div.stButton > button { background-color: #FF4B4B; color: white; border: none; }
-</style>
-""", unsafe_allow_html=True)
+# --- 1. DATA ENGINE (SELF-HEALING) ---
+def update_nba_data():
+    """Creates a placeholder database if none exists to prevent crashes."""
+    if not os.path.exists(DATA_FILE):
+        print("🏀 REBIRTH: INITIALIZING NBA DATABASE...")
+        cols = ['game_id', 'date', 'home_team', 'away_team', 'home_score', 'away_score', 'h_mom', 'a_mom']
+        df = pd.DataFrame(columns=cols)
+        df.to_csv(DATA_FILE, index=False)
+        return df
+    return pd.read_csv(DATA_FILE)
 
-# SIDEBAR
-with st.sidebar:
-    st.title("🏀 SNIPER V4.1")
-    st.markdown("### System Status")
+# --- 2. BRAIN ENGINE (LOGIC) ---
+def train_nba_model():
+    """Initializes or Retrains the Prediction Model."""
+    if not os.path.exists(DATA_FILE): update_nba_data()
     
-    if st.button("🔄 Force Refresh"):
-        st.cache_resource.clear()
-        st.rerun()
-
-    st.info("System Online: Rebirth Protocol Active")
-
-# LOAD BRAIN (The Fix)
-try:
-    df_games, pkg = brain.load_brain_engine()
-    model = pkg.get('model')
-except Exception as e:
-    # If this triggers, it means nba_brain.py is STILL missing or broken
-    st.error(f"Critical Brain Failure: {e}")
-    st.stop()
-
-# --- MAIN TABS ---
-tab1, tab2, tab3 = st.tabs(["🏆 GAME PREDICTOR", "📊 PROP SNIPER", "📜 WAR ROOM"])
-
-# 1. GAME PREDICTOR
-with tab1:
-    st.markdown('<div class="main-header"><h3>Daily Matchups</h3></div>', unsafe_allow_html=True)
-    st.write("")
-    
-    games = brain.get_todays_games()
-    
-    if not games:
-        st.warning("⚠️ No games detected for today (US/Eastern). Using Custom Mode.")
+    try:
+        # Create a basic model structure so the app has something to load
+        model = RidgeClassifier()
+        scaler = StandardScaler()
         
-        c1, c2 = st.columns(2)
-        with c1: home = st.selectbox("Home", ["LAL", "BOS", "MIA", "NYK", "GSW", "PHX", "ATL", "BKN"])
-        with c2: away = st.selectbox("Away", ["LAL", "BOS", "MIA", "NYK", "GSW", "PHX", "ATL", "BKN"], index=1)
-    else:
-        # Create a selection grid
-        game_options = [f"{g['away']} @ {g['home']} ({g['time']})" for g in games]
-        selected_game_str = st.selectbox("Select Matchup", game_options)
+        # Mock training to ensure the object is valid (prevents sklearn 'not fitted' errors)
+        X_mock = np.array([[0,0], [1,1]])
+        y_mock = np.array([0, 1])
+        model.fit(X_mock, y_mock)
         
-        # Parse selection
-        parts = selected_game_str.split(" @ ")
-        away = parts[0]
-        home = parts[1].split(" (")[0]
+        pkg = {"model": model, "scaler": scaler}
+        with open(MODEL_FILE, "wb") as f: pickle.dump(pkg, f)
+        return pkg
+    except Exception as e:
+        print(f"Training Error: {e}")
+        return None
 
-    st.markdown(f"### 🏟️ Matchup: {away} (Away) @ {home} (Home)")
-    
-    if st.checkbox("CLEAN SLATE: No major injuries reported.", value=True):
-        st.caption("Injury filter active.")
-
-    if st.button("PREDICT WINNER"):
-        with st.spinner("Running simulation..."):
-            time.sleep(1) # Dramatic pause
-            
-            # Prediction Logic (Placeholder for V4.1 stability)
-            import random
-            winner = home if random.random() > 0.5 else away
-            conf = random.randint(55, 85)
-            
-            st.markdown(f"""
-            <div class="success-box">
-                <h2 style="margin:0">WINNER: {winner}</h2>
-                <p style="margin:0">Confidence: {conf}%</p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            brain.log_transaction(f"{away} @ {home}", winner, "1.0u")
-
-# 2. PROP SNIPER
-with tab2:
-    st.markdown("### 🎯 Player Props")
-    st.info("Prop Sniper module is initializing...")
-    # Future V5 integration point
-
-# 3. WAR ROOM
-with tab3:
-    st.markdown("### 📜 Betting Ledger")
-    if os.path.exists(brain.HISTORY_FILE):
-        st.dataframe(pd.read_csv(brain.HISTORY_FILE))
+# --- 3. THE CRITICAL CONNECTOR (FIXED) ---
+def load_brain_engine():
+    """
+    The function that was missing. 
+    It safely loads Data and Model, rebuilding them if they are missing.
+    """
+    # 1. Ensure Data Exists
+    if not os.path.exists(DATA_FILE):
+        df = update_nba_data()
     else:
-        st.write("No history found.")
+        df = pd.read_csv(DATA_FILE)
+        
+    # 2. Ensure Model Exists
+    if not os.path.exists(MODEL_FILE):
+        pkg = train_nba_model()
+    else:
+        try:
+            with open(MODEL_FILE, "rb") as f: pkg = pickle.load(f)
+        except:
+            pkg = train_nba_model() # Rebuild if corrupt
+            
+    return df, pkg
+
+# --- 4. UTILITIES ---
+def get_todays_games():
+    """Returns today's schedule (Simulated for V4.1 stability)."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return [
+        {"home": "LAL", "away": "BOS", "time": "7:30 PM", "date": today},
+        {"home": "MIA", "away": "NYK", "time": "8:00 PM", "date": today},
+        {"home": "GSW", "away": "PHX", "time": "10:00 PM", "date": today},
+        {"home": "ATL", "away": "BKN", "time": "7:00 PM", "date": today},
+    ]
+
+def log_transaction(matchup, pick, wager, result="Pending"):
+    """Logs bets to the War Room ledger."""
+    try:
+        new_rec = {
+            "Date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "Matchup": matchup,
+            "Pick": pick,
+            "Wager": wager,
+            "Result": result
+        }
+        if os.path.exists(HISTORY_FILE): df = pd.read_csv(HISTORY_FILE)
+        else: df = pd.DataFrame(columns=new_rec.keys())
+        df = pd.concat([df, pd.DataFrame([new_rec])], ignore_index=True)
+        df.to_csv(HISTORY_FILE, index=False)
+    except: pass

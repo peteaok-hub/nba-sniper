@@ -1,8 +1,6 @@
 streamlit
 pandas
 numpy
-requests
-nba_api
-beautifulsoup4
 scikit-learn
-pytz
+requests
+openpyxl
