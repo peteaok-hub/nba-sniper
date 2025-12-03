@@ -1,34 +1,42 @@
 import streamlit as st
 import pandas as pd
 import nba_brain as brain
-import time
-import os
-import importlib  # <--- NEW: Required for Shock Protocol
+import importlib
 
-# --- BRAIN SHOCK PROTOCOL ---
-# This forces the server to re-read the file from disk, bypassing the cache.
+# --- BRAIN SHOCK PROTOCOL (V5.2) ---
 importlib.reload(brain)
-# ---------------------------
+# -----------------------------------
 
-# CONFIG
-st.set_page_config(page_title="SNIPER V5.1", page_icon="🏀", layout="wide")
+st.set_page_config(page_title="SNIPER V5.2", page_icon="🏀", layout="wide")
 
-# STYLES (Hard Rock / Mint Theme)
+# STYLES (Hard Rock Dark Mode)
 st.markdown("""
 <style>
-    .stApp { background-color: #121212; color: white; }
+    .stApp { background-color: #0e0e10; color: #e0e0e0; font-family: 'Roboto', sans-serif; }
     .hr-header { 
-        background: linear-gradient(90deg, #7b2cbf, #9d4edd); 
-        padding: 15px; border-radius: 8px; text-align: center; color: white; font-weight: bold;
-        margin-bottom: 20px;
+        background: linear-gradient(90deg, #6200ea, #b388ff); 
+        padding: 12px; border-radius: 8px; text-align: center; 
+        color: white; font-weight: 900; letter-spacing: 1px; margin-bottom: 20px;
     }
-    .game-row { 
-        background-color: #1e1e1e; border: 1px solid #333; padding: 15px; 
-        border-radius: 10px; margin-bottom: 10px;
+    .game-card { 
+        background-color: #1c1c1e; border: 1px solid #333; padding: 15px; 
+        border-radius: 12px; margin-bottom: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
-    .sniper-edge { color: #00ff00; font-weight: bold; }
-    .book-line { color: #aaa; font-size: 0.9em; }
-    div.stButton > button { background-color: #7b2cbf; color: white; border: none; width: 100%; }
+    .team-name { font-size: 1.2em; font-weight: bold; color: white; }
+    .record { font-size: 0.8em; color: #888; }
+    .edge-box { 
+        background-color: #2c2c2e; border-radius: 6px; padding: 8px; text-align: center; 
+        border: 1px solid #444;
+    }
+    .sniper-val { font-size: 1.3em; font-weight: bold; }
+    .book-val { font-size: 0.8em; color: #aaa; }
+    .green-edge { color: #00e676; text-shadow: 0 0 5px rgba(0, 230, 118, 0.4); }
+    .white-edge { color: #ffffff; }
+    div.stButton > button { 
+        background-color: #6200ea; color: white; border: none; width: 100%; font-weight: bold;
+    }
+    div.stButton > button:hover { background-color: #7c4dff; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -41,81 +49,92 @@ except Exception as e:
 
 # SIDEBAR
 with st.sidebar:
-    st.title("🏀 SNIPER V5.1")
-    st.caption("Hard Rock Protocol Active")
-    if st.button("🔄 Refresh Markets"): st.rerun()
-    
-    # DEBUG PANEL
-    with st.expander("🛠️ Debug Data"):
-        st.write("Brain Version:", getattr(brain, "__file__", "Unknown"))
-        if hasattr(brain, 'get_matchup_projection'):
-            st.success("✅ Sniper Logic Found")
-        else:
-            st.error("❌ Sniper Logic MISSING")
+    st.title("🏀 SNIPER V5.2")
+    st.caption("Hard Rock Data Integration")
+    if st.button("🔄 Refresh Data"): st.rerun()
+    st.markdown("---")
+    st.markdown("**Legend:**")
+    st.markdown("🔥 = High Momentum")
+    st.markdown("🟢 = >2pt Edge (Betable)")
 
-# --- HEADER ---
-st.markdown('<div class="hr-header"><h3>HARD ROCK HUNTER BOARD</h3></div>', unsafe_allow_html=True)
+# HEADER
+st.markdown('<div class="hr-header">HARD ROCK HUNTER BOARD</div>', unsafe_allow_html=True)
 
-# --- GAME GRID ---
+# GAME GRID
 games = brain.get_todays_games()
 
-# HEADERS
-c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-c1.write("**MATCHUP**")
-c2.write("**SPREAD (Edge)**")
-c3.write("**TOTAL (Edge)**")
-c4.write("**WINNER**")
+# Column Headers
+c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
+c1.caption("MATCHUP & RECORDS")
+c2.caption("SPREAD EDGE")
+c3.caption("TOTAL EDGE")
+c4.caption("ACTION")
 
 for g in games:
-    # 1. GET PROJECTION (WITH DEBUG TRAP)
     try:
         proj = brain.get_matchup_projection(g['home'], g['away'])
     except AttributeError:
-        st.error(f"CRITICAL ERROR: The Cloud is using an old Brain. Please Reboot.")
-        st.code(dir(brain)) # Show what IS available
+        st.error("Brain Version Mismatch. Please Reboot App.")
         st.stop()
     
-    # 2. UI ROW
     with st.container():
-        st.markdown("---")
-        c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
+        # Open Card
+        st.markdown('<div class="game-card">', unsafe_allow_html=True)
+        cols = st.columns([1.5, 1, 1, 1])
         
-        # COL 1: Matchup info
-        with c1:
-            st.write(f"**{g['away']} @ {g['home']}**")
-            st.caption(f"Time: {g['time']}")
-        
-        # COL 2: Spread Analysis
-        with c2:
-            book_spread = round(proj['projected_spread'] + (0.5 if proj['projected_spread'] > 0 else -0.5)) 
+        # 1. MATCHUP & RECORDS
+        with cols[0]:
+            h_mom = "🔥" if proj['h_mom'] > 5 else ""
+            a_mom = "🔥" if proj['a_mom'] > 5 else ""
+            
+            st.markdown(f"<div class='team-name'>{g['away']} {a_mom}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='record'>({g['a_rec']})</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='margin: 5px 0; color:#555'>@</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='team-name'>{g['home']} {h_mom}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='record'>({g['h_rec']})</div>", unsafe_allow_html=True)
+            
+        # 2. SPREAD ANALYSIS
+        with cols[1]:
             my_spread = round(proj['projected_spread'], 1)
+            book_spread = g.get('book_spread', 0)
             
-            # Calculate Edge
+            # Edge logic: If my spread is -6.5 and Book is -8, I have 1.5 pts value on Home
             diff = abs(my_spread - book_spread)
-            color = "green" if diff >= 2.0 else "white"
+            color = "green-edge" if diff >= 2.0 else "white-edge"
             
-            st.markdown(f"<span style='color:{color}'>{my_spread}</span>", unsafe_allow_html=True)
-            st.caption(f"Book: {book_spread}")
+            st.markdown(f"""
+            <div class='edge-box'>
+                <div class='sniper-val {color}'>{my_spread}</div>
+                <div class='book-val'>HR: {book_spread}</div>
+                <div class='book-val' style='color:{'#00e676' if diff>=2.0 else '#555'}'>Edge: {diff:.1f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        # COL 3: Total Analysis
-        with c3:
-            book_total = 230.0 # Standard placeholder
+        # 3. TOTAL ANALYSIS
+        with cols[2]:
             my_total = round(proj['projected_total'], 1)
+            book_total = g.get('book_total', 230)
             
             diff_t = abs(my_total - book_total)
-            color_t = "green" if diff_t >= 4.0 else "white"
+            color_t = "green-edge" if diff_t >= 4.0 else "white-edge"
             
-            st.markdown(f"<span style='color:{color_t}'>{my_total}</span>", unsafe_allow_html=True)
-            st.caption(f"Book: {book_total}")
-            
-        # COL 4: Winner / Action
-        with c4:
+            st.markdown(f"""
+            <div class='edge-box'>
+                <div class='sniper-val {color_t}'>{my_total}</div>
+                <div class='book-val'>HR: {book_total}</div>
+                <div class='book-val' style='color:{'#00e676' if diff_t>=4.0 else '#555'}'>Diff: {diff_t:.1f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # 4. ACTION
+        with cols[3]:
             winner = g['home'] if proj['win_prob'] > 50 else g['away']
             conf = int(proj['win_prob']) if winner == g['home'] else int(100 - proj['win_prob'])
             
-            if st.button(f"Bet {winner}", key=f"btn_{g['home']}"):
+            st.markdown("<br>", unsafe_allow_html=True) # Spacer
+            if st.button(f"Bet {winner}", key=f"b_{g['home']}"):
                 brain.log_transaction(f"{g['away']} @ {g['home']}", winner, "1u")
-                st.toast(f"Logged: {winner} ({conf}%)")
+                st.toast(f"✅ Logged: {winner} ({conf}%)")
+            st.caption(f"Conf: {conf}%")
 
-st.markdown("---")
-st.caption("Green numbers indicate a significant edge (>2pts Spread, >4pts Total) against the book.")
+        st.markdown('</div>', unsafe_allow_html=True)
