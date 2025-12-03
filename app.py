@@ -1,3 +1,5 @@
+# NBA SNIPER INTELLIGENCE ENGINE V5.0
+# LAST UPDATED: HARD ROCK PROTOCOL
 import pandas as pd
 import numpy as np
 import os
@@ -74,8 +76,7 @@ def get_matchup_projection(home, away):
     Calculates the 'True Line' based on Momentum.
     Returns: {win_prob, projected_spread, projected_total}
     """
-    
-    # Simulate Momentum (Replace with real lookup in V5.1)
+    # Simulate Momentum
     tier_1 = ["BOS", "DEN", "OKC", "MIN", "LAC"] # +10 Momentum
     tier_2 = ["MIL", "PHX", "NYK", "CLE", "DAL", "MIA"] # +5 Momentum
     tier_3 = ["LAL", "GSW", "SAC", "IND", "NOP", "ORL"] # +0 Momentum
@@ -92,12 +93,12 @@ def get_matchup_projection(home, away):
     a_rat = get_rating(away)
     
     # 1. SPREAD CALCULATION
-    raw_spread = a_rat - h_rat # Negative means Home Favorite
+    raw_spread = a_rat - h_rat 
     
     # 2. TOTAL CALCULATION
     base_total = 230
-    if home in tier_1 or away in tier_1: base_total -= 4 # Better defense
-    if home in tier_3 or away in tier_3: base_total += 4 # Faster pace
+    if home in tier_1 or away in tier_1: base_total -= 4 
+    if home in tier_3 or away in tier_3: base_total += 4 
     
     # 3. WIN PROBABILITY
     win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
@@ -118,7 +119,6 @@ def get_todays_games():
         {"home": "NYK", "away": "CHA", "time": "7:30 PM"},
         {"home": "CHI", "away": "BKN", "time": "8:00 PM"},
         {"home": "HOU", "away": "SAC", "time": "8:00 PM"},
-        # FIXED: Changed OKC to MIA to match Hard Rock Feed
         {"home": "DAL", "away": "MIA", "time": "8:30 PM"},
     ]
 
