@@ -16,7 +16,6 @@ def update_nba_data():
     """Creates a placeholder database if none exists to prevent crashes."""
     if not os.path.exists(DATA_FILE):
         print("🏀 REBIRTH: INITIALIZING NBA DATABASE...")
-        # Create a dummy structure if file is missing to prevent crash
         cols = ['game_id', 'date', 'home_team', 'away_team', 'home_score', 'away_score', 'h_mom', 'a_mom']
         df = pd.DataFrame(columns=cols)
         df.to_csv(DATA_FILE, index=False)
@@ -70,7 +69,7 @@ def load_brain_engine():
 
 # --- 4. UTILITIES ---
 def get_todays_games():
-    """Returns today's schedule (Simulated for V4.1 stability)."""
+    """Returns today's schedule."""
     today = datetime.now().strftime("%Y-%m-%d")
     return [
         {"home": "LAL", "away": "BOS", "time": "7:30 PM", "date": today},
