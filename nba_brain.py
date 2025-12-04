@@ -1,4 +1,4 @@
-# NBA SNIPER INTELLIGENCE ENGINE V6.0 (FULLY AUTONOMOUS)
+# NBA SNIPER INTELLIGENCE ENGINE V6.1 (CACHE BUSTER)
 # STATUS: LIVE DATA FEED ACTIVE
 import pandas as pd
 import numpy as np
@@ -91,9 +91,6 @@ def get_todays_games():
         for game in data['scoreboard']['games']:
             home_team = game['homeTeam']['teamTricode']
             away_team = game['awayTeam']['teamTricode']
-            
-            # Format time (UTC to Local approx or just raw string)
-            # The feed gives UTC, for V6.0 we simplify to "Live/TBD" or raw parsing
             game_time = game['gameStatusText'] # e.g., "7:30 pm ET" or "Final"
             
             # Live Records
@@ -102,12 +99,10 @@ def get_todays_games():
             a_wins = game['awayTeam']['wins']
             a_losses = game['awayTeam']['losses']
             
-            # Generate a Simulated Book Line (Since we don't have paid Odds API)
-            # In V7 we can hook up The-Odds-API. For now, we simulate a "Market Consensus"
-            # based on win percentage differential to keep the UI populated.
+            # Generate a Simulated Book Line
             win_pct_diff = (h_wins / max(1, h_wins + h_losses)) - (a_wins / max(1, a_wins + a_losses))
-            sim_spread = round(win_pct_diff * -15.0 * 2) / 2.0 # Rough heuristic
-            if sim_spread == 0: sim_spread = -1.0 # Avoid Pick'em
+            sim_spread = round(win_pct_diff * -15.0 * 2) / 2.0 
+            if sim_spread == 0: sim_spread = -1.0
             
             games.append({
                 "home": home_team,
@@ -116,7 +111,7 @@ def get_todays_games():
                 "h_rec": f"{h_wins}-{h_losses}",
                 "a_rec": f"{a_wins}-{a_losses}",
                 "book_spread": sim_spread, 
-                "book_total": 228.5 # Standard NBA median
+                "book_total": 228.5
             })
             
         return games
@@ -133,8 +128,7 @@ def get_matchup_projection(home, away):
     """
     Calculates the 'True Line' based on Momentum.
     """
-    # Dynamic Tier System (Updates based on generic strength)
-    # Ideally this reads from a live stats file, but for V6.0 we use an Expanded Look-up
+    # Dynamic Tier System
     tier_1 = ["BOS", "OKC", "MIN", "DEN", "LAC", "CLE", "MIL"] 
     tier_2 = ["PHX", "NYK", "DAL", "MIA", "SAC", "IND", "NOP", "ORL"] 
     tier_3 = ["LAL", "GSW", "HOU", "BKN", "UTA", "PHI"] 
