@@ -1,4 +1,5 @@
-# NBA SNIPER INTELLIGENCE ENGINE V5.2 (DATA ENRICHED)
+# NBA SNIPER INTELLIGENCE ENGINE V5.2 (DAILY UPDATE)
+# TARGET DATE: DEC 4 2025
 import pandas as pd
 import numpy as np
 import os
@@ -60,28 +61,28 @@ def get_matchup_projection(home, away):
     """
     Calculates the 'True Line' based on Momentum.
     """
-    # Momentum Tiers (Simulated for V5.2)
-    tier_1 = ["BOS", "DEN", "OKC", "MIN", "LAC", "CLE", "MIL"] 
-    tier_2 = ["PHX", "NYK", "DAL", "MIA", "SAC", "IND", "NOP"] 
-    tier_3 = ["LAL", "GSW", "ORL", "HOU", "BKN", "UTA"] 
-    tier_4 = ["ATL", "CHI", "CHA", "POR", "MEM", "TOR"]
+    # Momentum Tiers (Updated for Dec 4)
+    tier_1 = ["BOS", "MIN", "OKC", "DEN"] # Elite
+    tier_2 = ["PHI", "LAL", "ORL", "NYK", "MIA"] # Strong
+    tier_3 = ["GSW", "BKN", "TOR", "CLE", "HOU"] # Mid
+    tier_4 = ["WAS", "UTA", "NOP", "DET", "SAS"] # Weak
     
     def get_rating(team):
         if team in tier_1: return 10
         if team in tier_2: return 5
         if team in tier_3: return 0
-        return -5 # Tier 4/5
+        return -6 # Tier 4
 
-    h_rat = get_rating(home) + 3 # Home Court
+    h_rat = get_rating(home) + 3 # Home Court Advantage
     a_rat = get_rating(away)
     
-    # Spread: Negative = Home Favorite
+    # Spread Calculation
     raw_spread = a_rat - h_rat 
     
-    # Total: Baseline 230
+    # Total Calculation
     base_total = 230
-    if home in tier_1 or away in tier_1: base_total -= 4 
-    if home in tier_3 or away in tier_3: base_total += 4 
+    if home in tier_1 or away in tier_1: base_total -= 3 
+    if home in tier_4 or away in tier_4: base_total += 3 
     
     win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
     
@@ -93,21 +94,26 @@ def get_matchup_projection(home, away):
         "a_mom": a_rat
     }
 
-# --- 4. UTILITIES (HARD ROCK DATA FEED) ---
+# --- 4. UTILITIES (DAILY TARGET LIST) ---
 def get_todays_games():
     """
-    Returns games with 'Book Lines' derived from your screenshot.
+    MANUAL FEED: Games transcribed from Hard Rock Screenshot (Dec 4).
     """
     return [
-        {"home": "IND", "away": "DEN", "time": "7:00 PM", "h_rec": "14-8", "a_rec": "16-6", "book_spread": -8.0, "book_total": 236.0},
-        {"home": "CLE", "away": "POR", "time": "7:00 PM", "h_rec": "13-9", "a_rec": "6-15", "book_spread": -10.0, "book_total": 240.5},
-        {"home": "ORL", "away": "SAS", "time": "7:00 PM", "h_rec": "16-5", "a_rec": "3-18", "book_spread": -8.0, "book_total": 235.0},
-        {"home": "NYK", "away": "CHA", "time": "7:30 PM", "h_rec": "12-8", "a_rec": "7-13", "book_spread": -8.5, "book_total": 237.0},
-        {"home": "ATL", "away": "LAC", "time": "7:30 PM", "h_rec": "9-11", "a_rec": "11-10", "book_spread": -3.0, "book_total": 226.5},
-        {"home": "MIL", "away": "DET", "time": "8:00 PM", "h_rec": "15-6", "a_rec": "2-19", "book_spread": -5.0, "book_total": 230.5},
-        {"home": "HOU", "away": "SAC", "time": "8:00 PM", "h_rec": "10-10", "a_rec": "12-8", "book_spread": -15.5, "book_total": 231.0},
-        {"home": "CHI", "away": "BKN", "time": "8:00 PM", "h_rec": "9-13", "a_rec": "12-9", "book_spread": 8.0, "book_total": 231.0},
-        {"home": "DAL", "away": "MIA", "time": "8:30 PM", "h_rec": "14-8", "a_rec": "12-9", "book_spread": -5.5, "book_total": 240.5},
+        # Celtics @ Wizards (+9)
+        {"home": "WAS", "away": "BOS", "time": "7:00 PM", "h_rec": "3-17", "a_rec": "18-4", "book_spread": 9.0, "book_total": 228.5},
+        
+        # Warriors @ 76ers (-3.5)
+        {"home": "PHI", "away": "GSW", "time": "7:00 PM", "h_rec": "14-7", "a_rec": "10-11", "book_spread": -3.5, "book_total": 224.0},
+        
+        # Jazz @ Nets (+4.5) - Note: Hard Rock shows Jazz favored
+        {"home": "BKN", "away": "UTA", "time": "7:30 PM", "h_rec": "10-11", "a_rec": "7-14", "book_spread": 4.5, "book_total": 231.0},
+        
+        # Lakers @ Raptors (-2)
+        {"home": "TOR", "away": "LAL", "time": "7:30 PM", "h_rec": "9-12", "a_rec": "12-9", "book_spread": -2.0, "book_total": 228.0},
+        
+        # Timberwolves @ Pelicans (+11.5)
+        {"home": "NOP", "away": "MIN", "time": "8:00 PM", "h_rec": "11-11", "a_rec": "16-4", "book_spread": 11.5, "book_total": 233.5},
     ]
 
 def log_transaction(matchup, pick, wager, result="Pending"):
