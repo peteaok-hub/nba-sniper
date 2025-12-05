@@ -1,5 +1,5 @@
-# NBA SNIPER INTELLIGENCE ENGINE V6.3 (ODDSMAKER)
-# STATUS: MANUAL TARGETING WITH FULL ODDS
+# NBA SNIPER INTELLIGENCE ENGINE V6.3 (ODDSMAKER REVERT)
+# STATUS: MANUAL TARGETING WITH FULL ODDS (NO API)
 import pandas as pd
 import numpy as np
 import os
@@ -31,6 +31,7 @@ def train_nba_model():
         model_total = Ridge()
         scaler = StandardScaler()
         
+        # Mock fit to ensure objects exist
         X_mock = np.array([[0,0], [10,10]])
         y_win = np.array([0, 1])
         y_spread = np.array([-5, 5])
@@ -55,60 +56,38 @@ def load_brain_engine():
         pkg = train_nba_model()
         return pd.read_csv(DATA_FILE), pkg
 
-# --- 3. TARGETING FEED (FULL ODDS) ---
+# --- 3. TARGETING FEED (MANUAL FULL ODDS) ---
 def get_todays_games():
     """
     Returns exact games with Moneyline (ML) and Spread Odds.
+    UPDATE THIS LIST DAILY FROM HARD ROCK BET.
     """
     return [
-        # Celtics @ Wizards
+        # GAME 1
         {
-            "home": "WAS", "away": "BOS", "time": "7:00 PM", 
-            "h_rec": "3-17", "a_rec": "18-4", 
-            "book_spread": 8.5, "spread_odds": -110, # Wizards +8.5
-            "book_total": 228.5, "total_odds": -110,
-            "h_ml": +300, "a_ml": -400
+            "home": "MIA", "away": "NYK", "time": "7:30 PM", 
+            "h_rec": "12-9", "a_rec": "14-8", 
+            "book_spread": -2.5, "spread_odds": -110, 
+            "book_total": 218.0, "total_odds": -110,
+            "h_ml": -140, "a_ml": +120
         },
-        # Warriors @ 76ers
+        
+        # GAME 2
         {
-            "home": "PHI", "away": "GSW", "time": "7:00 PM", 
-            "h_rec": "14-7", "a_rec": "10-11", 
-            "book_spread": -3.5, "spread_odds": -110, # 76ers -3.5
-            "book_total": 224.0, "total_odds": -110,
-            "h_ml": -160, "a_ml": +135
-        },
-        # Jazz @ Nets
-        {
-            "home": "BKN", "away": "UTA", "time": "7:30 PM", 
-            "h_rec": "10-11", "a_rec": "7-14", 
-            "book_spread": 4.5, "spread_odds": -110, # Nets +4.5 (Jazz Favored)
-            "book_total": 231.0, "total_odds": -110,
-            "h_ml": +150, "a_ml": -180
-        },
-        # Lakers @ Raptors
-        {
-            "home": "TOR", "away": "LAL", "time": "7:30 PM", 
-            "h_rec": "9-12", "a_rec": "12-9", 
-            "book_spread": -2.0, "spread_odds": -110, # Raptors -2.0
-            "book_total": 228.0, "total_odds": -110,
-            "h_ml": -125, "a_ml": +105
-        },
-        # Wolves @ Pelicans
-        {
-            "home": "NOP", "away": "MIN", "time": "8:00 PM", 
-            "h_rec": "11-11", "a_rec": "16-4", 
-            "book_spread": 11.5, "spread_odds": -110, # Pelicans +11.5
-            "book_total": 233.5, "total_odds": -110,
-            "h_ml": +400, "a_ml": -550
+            "home": "LAL", "away": "PHX", "time": "10:00 PM", 
+            "h_rec": "15-10", "a_rec": "13-11", 
+            "book_spread": 4.5, "spread_odds": -115, 
+            "book_total": 235.5, "total_odds": -110,
+            "h_ml": +160, "a_ml": -190
         },
     ]
 
 # --- 4. PREDICTION LOGIC ---
 def get_matchup_projection(home, away):
     # Dynamic Tier System
-    tier_1 = ["BOS", "MIN", "OKC", "DEN", "PHI"] 
-    tier_2 = ["LAL", "NYK", "MIA", "SAC", "IND", "NOP", "ORL"] 
-    tier_3 = ["GSW", "HOU", "BKN", "UTA", "CLE", "TOR"] 
+    tier_1 = ["BOS", "MIN", "OKC", "DEN", "PHI", "MIL"] 
+    tier_2 = ["LAL", "NYK", "MIA", "SAC", "IND", "NOP", "ORL", "CLE"] 
+    tier_3 = ["GSW", "HOU", "BKN", "UTA", "TOR", "DAL", "PHX"] 
     tier_4 = ["ATL", "CHI", "CHA", "POR", "MEM", "WAS", "DET", "SAS"]
     
     def get_rating(team):
@@ -122,9 +101,7 @@ def get_matchup_projection(home, away):
     
     raw_spread = a_rat - h_rat 
     
-    # Calculate implied Moneyline Probability
-    # Simplistic conversion for V6.3
-    # If spread is -8, win prob is high
+    # Calculate implied Moneyline Probability (Sigmoid)
     win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
     
     # Projected Score

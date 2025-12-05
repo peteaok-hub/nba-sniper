@@ -4,12 +4,13 @@ import nba_brain as brain
 import importlib
 
 # --- BRAIN SHOCK PROTOCOL ---
+# Forces the app to re-read nba_brain.py every time you click Refresh
 importlib.reload(brain)
 # ---------------------------
 
 st.set_page_config(page_title="SNIPER V6.3", page_icon="🏀", layout="wide")
 
-# STYLES (Hard Rock Dark)
+# STYLES (Hard Rock Dark Mode)
 st.markdown("""
 <style>
     .stApp { background-color: #0e0e10; color: #e0e0e0; }
@@ -34,6 +35,7 @@ st.markdown("""
     div.stButton > button { 
         background-color: #6200ea; color: white; border: none; width: 100%; font-weight: bold;
     }
+    div.stButton > button:hover { background-color: #7c4dff; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -49,12 +51,20 @@ with st.sidebar:
     st.title("🏀 SNIPER V6.3")
     st.caption("Full Odds Integration")
     if st.button("🔄 Refresh"): st.rerun()
+    
+    with st.expander("ℹ️ Legend"):
+        st.markdown("**Green Text:** >2pt Edge vs Book")
+        st.markdown("**ML:** Moneyline Odds")
 
 # HEADER
 st.markdown('<div class="hr-header">HARD ROCK HUNTER BOARD</div>', unsafe_allow_html=True)
 
 # GAME GRID
 games = brain.get_todays_games()
+
+if not games:
+    st.warning("⚠️ No games found in Brain. Please update nba_brain.py manually.")
+    st.stop()
 
 c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
 c1.caption("MATCHUP & MONEYLINE")
@@ -63,7 +73,11 @@ c3.caption("TOTAL (Edge)")
 c4.caption("ACTION")
 
 for g in games:
-    proj = brain.get_matchup_projection(g['home'], g['away'])
+    try:
+        proj = brain.get_matchup_projection(g['home'], g['away'])
+    except Exception as e:
+        st.error(f"Error projecting {g['home']} vs {g['away']}: {e}")
+        continue
     
     with st.container():
         st.markdown('<div class="game-card">', unsafe_allow_html=True)
@@ -71,14 +85,14 @@ for g in games:
         
         # 1. MATCHUP & MONEYLINE
         with cols[0]:
-            st.markdown(f"**{g['away']}** <span style='color:#aaa'>({g['a_ml']})</span>", unsafe_allow_html=True)
-            st.markdown(f"**{g['home']}** <span style='color:#aaa'>({g['h_ml']})</span>", unsafe_allow_html=True)
+            st.markdown(f"**{g['away']}** <span style='color:#aaa'>({g.get('a_ml', 'N/A')})</span>", unsafe_allow_html=True)
+            st.markdown(f"**{g['home']}** <span style='color:#aaa'>({g.get('h_ml', 'N/A')})</span>", unsafe_allow_html=True)
             st.caption(f"Proj Score: {proj['score_str']}")
             
         # 2. SPREAD
         with cols[1]:
             my_spread = round(proj['projected_spread'], 1)
-            book_spread = g['book_spread']
+            book_spread = g.get('book_spread', 0)
             diff = abs(my_spread - book_spread)
             color = "green-edge" if diff >= 2.0 else "white-edge"
             
@@ -86,14 +100,14 @@ for g in games:
             <div class='edge-box'>
                 <div class='sniper-val {color}'>{my_spread}</div>
                 <div class='book-val'>HR: {book_spread}</div>
-                <div class='odds-sub'>({g['spread_odds']})</div>
+                <div class='odds-sub'>({g.get('spread_odds', -110)})</div>
             </div>
             """, unsafe_allow_html=True)
 
         # 3. TOTAL
         with cols[2]:
             my_total = round(proj['projected_total'], 1)
-            book_total = g['book_total']
+            book_total = g.get('book_total', 220)
             diff_t = abs(my_total - book_total)
             color_t = "green-edge" if diff_t >= 4.0 else "white-edge"
             
@@ -101,7 +115,7 @@ for g in games:
             <div class='edge-box'>
                 <div class='sniper-val {color_t}'>{my_total}</div>
                 <div class='book-val'>HR: {book_total}</div>
-                <div class='odds-sub'>({g['total_odds']})</div>
+                <div class='odds-sub'>({g.get('total_odds', -110)})</div>
             </div>
             """, unsafe_allow_html=True)
 
