@@ -8,14 +8,14 @@ import importlib
 importlib.reload(brain)
 # ---------------------------
 
-st.set_page_config(page_title="SNIPER V6.3", page_icon="🏀", layout="wide")
+st.set_page_config(page_title="SNIPER V9.0", page_icon="🏀", layout="wide")
 
-# STYLES (Hard Rock Dark Mode)
+# STYLES (Hard Rock Red/Dark Theme)
 st.markdown("""
 <style>
     .stApp { background-color: #0e0e10; color: #e0e0e0; }
     .hr-header { 
-        background: linear-gradient(90deg, #6200ea, #b388ff); 
+        background: linear-gradient(90deg, #d50000, #ff1744); 
         padding: 12px; border-radius: 8px; text-align: center; 
         color: white; font-weight: 900; letter-spacing: 1px; margin-bottom: 20px;
     }
@@ -29,13 +29,9 @@ st.markdown("""
     }
     .sniper-val { font-size: 1.2em; font-weight: bold; }
     .book-val { font-size: 0.8em; color: #aaa; }
-    .odds-sub { font-size: 0.7em; color: #888; }
     .green-edge { color: #00e676; text-shadow: 0 0 5px rgba(0, 230, 118, 0.4); }
     .white-edge { color: #ffffff; }
-    div.stButton > button { 
-        background-color: #6200ea; color: white; border: none; width: 100%; font-weight: bold;
-    }
-    div.stButton > button:hover { background-color: #7c4dff; }
+    div.stButton > button { background-color: #d50000; color: white; border: none; width: 100%; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -48,33 +44,27 @@ except Exception as e:
 
 # SIDEBAR
 with st.sidebar:
-    st.title("🏀 SNIPER V6.3")
-    st.caption("Full Odds Integration")
+    st.title("🏀 SNIPER V9.0")
+    st.caption("Fatigue & Rest Protocol")
     if st.button("🔄 Refresh"): st.rerun()
-    
-    with st.expander("ℹ️ Legend"):
-        st.markdown("**Green Text:** >2pt Edge vs Book")
-        st.markdown("**ML:** Moneyline Odds")
+    st.info("🔥 = Winning Streak | ⚠️ = Back-to-Back (Tired)")
 
 # HEADER
-st.markdown('<div class="hr-header">HARD ROCK HUNTER BOARD</div>', unsafe_allow_html=True)
+st.markdown('<div class="hr-header">THE CRUSHER BOARD</div>', unsafe_allow_html=True)
 
 # GAME GRID
 games = brain.get_todays_games()
 
-if not games:
-    st.warning("⚠️ No games found in Brain. Please update nba_brain.py manually.")
-    st.stop()
-
 c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1])
-c1.caption("MATCHUP & MONEYLINE")
-c2.caption("SPREAD (Edge)")
-c3.caption("TOTAL (Edge)")
+c1.caption("MATCHUP & REST")
+c2.caption("SPREAD EDGE")
+c3.caption("TOTAL EDGE")
 c4.caption("ACTION")
 
 for g in games:
     try:
-        proj = brain.get_matchup_projection(g['home'], g['away'])
+        # Pass the WHOLE game object now to use Rest/Streak data
+        proj = brain.get_matchup_projection(g) 
     except Exception as e:
         st.error(f"Error projecting {g['home']} vs {g['away']}: {e}")
         continue
@@ -83,10 +73,15 @@ for g in games:
         st.markdown('<div class="game-card">', unsafe_allow_html=True)
         cols = st.columns([1.5, 1, 1, 1])
         
-        # 1. MATCHUP & MONEYLINE
+        # 1. MATCHUP
         with cols[0]:
-            st.markdown(f"**{g['away']}** <span style='color:#aaa'>({g.get('a_ml', 'N/A')})</span>", unsafe_allow_html=True)
-            st.markdown(f"**{g['home']}** <span style='color:#aaa'>({g.get('h_ml', 'N/A')})</span>", unsafe_allow_html=True)
+            # Format Rest Text (B2B vs Days)
+            h_rest_txt = "B2B" if g.get('h_rest', 1) == 0 else f"{g.get('h_rest', 1)}d Rest"
+            a_rest_txt = "B2B" if g.get('a_rest', 1) == 0 else f"{g.get('a_rest', 1)}d Rest"
+            
+            # Display Team Names with Emojis
+            st.markdown(f"**{g['away']}** {proj['a_emoji']} @ **{g['home']}** {proj['h_emoji']}", unsafe_allow_html=True)
+            st.caption(f"Rest: {a_rest_txt} vs {h_rest_txt}")
             st.caption(f"Proj Score: {proj['score_str']}")
             
         # 2. SPREAD
@@ -94,13 +89,14 @@ for g in games:
             my_spread = round(proj['projected_spread'], 1)
             book_spread = g.get('book_spread', 0)
             diff = abs(my_spread - book_spread)
-            color = "green-edge" if diff >= 2.0 else "white-edge"
+            
+            # Green Edge logic (Tighter threshold for Crusher model)
+            color = "green-edge" if diff >= 3.0 else "white-edge"
             
             st.markdown(f"""
             <div class='edge-box'>
                 <div class='sniper-val {color}'>{my_spread}</div>
-                <div class='book-val'>HR: {book_spread}</div>
-                <div class='odds-sub'>({g.get('spread_odds', -110)})</div>
+                <div class='book-val'>Book: {book_spread}</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -109,13 +105,12 @@ for g in games:
             my_total = round(proj['projected_total'], 1)
             book_total = g.get('book_total', 220)
             diff_t = abs(my_total - book_total)
-            color_t = "green-edge" if diff_t >= 4.0 else "white-edge"
+            color_t = "green-edge" if diff_t >= 5.0 else "white-edge"
             
             st.markdown(f"""
             <div class='edge-box'>
                 <div class='sniper-val {color_t}'>{my_total}</div>
-                <div class='book-val'>HR: {book_total}</div>
-                <div class='odds-sub'>({g.get('total_odds', -110)})</div>
+                <div class='book-val'>Book: {book_total}</div>
             </div>
             """, unsafe_allow_html=True)
 
