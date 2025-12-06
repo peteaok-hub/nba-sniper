@@ -4,7 +4,6 @@ import nba_brain as brain
 import importlib
 
 # --- BRAIN SHOCK PROTOCOL ---
-# Forces the app to re-read nba_brain.py every time you click Refresh
 importlib.reload(brain)
 # ---------------------------
 
@@ -28,7 +27,6 @@ st.markdown("""
         border: 1px solid #444; height: 100%;
     }
     .sniper-val { font-size: 1.2em; font-weight: bold; }
-    .book-val { font-size: 0.8em; color: #aaa; }
     .green-edge { color: #00e676; text-shadow: 0 0 5px rgba(0, 230, 118, 0.4); }
     .white-edge { color: #ffffff; }
     div.stButton > button { background-color: #d50000; color: white; border: none; width: 100%; font-weight: bold; }
@@ -63,7 +61,7 @@ c4.caption("ACTION")
 
 for g in games:
     try:
-        # Pass the WHOLE game object now to use Rest/Streak data
+        # --- V9.0 FIX: Pass the WHOLE game object 'g' ---
         proj = brain.get_matchup_projection(g) 
     except Exception as e:
         st.error(f"Error projecting {g['home']} vs {g['away']}: {e}")
@@ -75,12 +73,10 @@ for g in games:
         
         # 1. MATCHUP
         with cols[0]:
-            # Format Rest Text (B2B vs Days)
-            h_rest_txt = "B2B" if g.get('h_rest', 1) == 0 else f"{g.get('h_rest', 1)}d Rest"
-            a_rest_txt = "B2B" if g.get('a_rest', 1) == 0 else f"{g.get('a_rest', 1)}d Rest"
+            h_rest_txt = "B2B" if g.get('h_rest') == 0 else f"{g.get('h_rest', 1)}d Rest"
+            a_rest_txt = "B2B" if g.get('a_rest') == 0 else f"{g.get('a_rest', 1)}d Rest"
             
-            # Display Team Names with Emojis
-            st.markdown(f"**{g['away']}** {proj['a_emoji']} @ **{g['home']}** {proj['h_emoji']}", unsafe_allow_html=True)
+            st.markdown(f"**{g['away']}** {proj.get('a_emoji','')} @ **{g['home']}** {proj.get('h_emoji','')}", unsafe_allow_html=True)
             st.caption(f"Rest: {a_rest_txt} vs {h_rest_txt}")
             st.caption(f"Proj Score: {proj['score_str']}")
             
@@ -89,8 +85,6 @@ for g in games:
             my_spread = round(proj['projected_spread'], 1)
             book_spread = g.get('book_spread', 0)
             diff = abs(my_spread - book_spread)
-            
-            # Green Edge logic (Tighter threshold for Crusher model)
             color = "green-edge" if diff >= 3.0 else "white-edge"
             
             st.markdown(f"""
