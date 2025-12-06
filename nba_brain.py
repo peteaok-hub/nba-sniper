@@ -59,87 +59,59 @@ def load_brain_engine():
 def get_todays_games():
     """
     Returns exact games with Moneyline (ML) and Spread Odds.
-    UPDATED: DEC 6, 2025
+    UPDATED: DEC 6, 2025 (EVENING SLATE)
     """
     return [
+        # 5:00 PM EST
+        {
+            "home": "BKN", "away": "NOP", "time": "5:00 PM", "h_rec": "Live", "a_rec": "Live", 
+            "book_spread": -3.5, "spread_odds": -110, # Nets -3.5
+            "book_total": 227.0, "total_odds": -110,
+            "h_ml": -160, "a_ml": +135
+        },
+
         # 7:00 PM EST
         {
-            "home": "BOS", "away": "LAL", "time": "7:00 PM", "h_rec": "19-3", "a_rec": "12-10", 
-            "book_spread": -8.5, "spread_odds": -110, 
-            "book_total": 228.0, "total_odds": -110,
-            "h_ml": -325, "a_ml": +250
-        },
-        {
-            "home": "ORL", "away": "MIA", "time": "7:00 PM", "h_rec": "16-6", "a_rec": "11-9", 
-            "book_spread": -5.5, "spread_odds": -110, 
-            "book_total": 241.0, "total_odds": -110,
-            "h_ml": -220, "a_ml": +170
+            "home": "WAS", "away": "ATL", "time": "7:00 PM", "h_rec": "Live", "a_rec": "Live", 
+            "book_spread": 9.0, "spread_odds": -105, # Wizards +9 (Hawks Favored)
+            "book_total": 235.0, "total_odds": -110,
+            "h_ml": +325, "a_ml": -450
         },
 
         # 7:30 PM EST
         {
-            "home": "NYK", "away": "UTA", "time": "7:30 PM", "h_rec": "13-7", "a_rec": "7-13", 
-            "book_spread": -15.5, "spread_odds": -115, 
-            "book_total": 241.5, "total_odds": -110,
-            "h_ml": -1200, "a_ml": +750
+            "home": "DET", "away": "MIL", "time": "7:30 PM", "h_rec": "Live", "a_rec": "Live", 
+            "book_spread": -12.5, "spread_odds": -115, # Pistons -12.5 (Bucks underdog?)
+            "book_total": 223.0, "total_odds": -110,
+            "h_ml": -700, "a_ml": +475
         },
         {
-            "home": "CLE", "away": "SAS", "time": "7:30 PM", "h_rec": "19-3", "a_rec": "11-10", 
-            "book_spread": -3.5, "spread_odds": -110, 
-            "book_total": 238.5, "total_odds": -110,
-            "h_ml": -160, "a_ml": +135
-        },
-        {
-            "home": "TOR", "away": "CHA", "time": "7:30 PM", "h_rec": "7-15", "a_rec": "6-14", 
-            "book_spread": -7.0, "spread_odds": -110, 
-            "book_total": 229.5, "total_odds": -110,
-            "h_ml": -275, "a_ml": +200
-        },
-        {
-            "home": "ATL", "away": "DEN", "time": "7:30 PM", "h_rec": "11-11", "a_rec": "11-8", 
-            "book_spread": 5.0, "spread_odds": -120, # Nuggets favored on road (-5)
-            "book_total": 238.0, "total_odds": -115,
-            "h_ml": +170, "a_ml": -220
-        },
-        {
-            "home": "DET", "away": "POR", "time": "7:30 PM", "h_rec": "9-14", "a_rec": "8-13", 
-            "book_spread": -7.5, "spread_odds": -110, 
-            "book_total": 235.5, "total_odds": -115,
+            "home": "CLE", "away": "GSW", "time": "7:30 PM", "h_rec": "Live", "a_rec": "Live", 
+            "book_spread": -8.0, "spread_odds": -110, # Cavs -8
+            "book_total": 227.5, "total_odds": -110,
             "h_ml": -325, "a_ml": +250
         },
 
         # 8:00 PM EST
         {
-            "home": "MEM", "away": "LAC", "time": "8:00 PM", "h_rec": "15-7", "a_rec": "13-9", 
-            "book_spread": 1.5, "spread_odds": -110, # Clippers favored on road (-1.5)
-            "book_total": 223.5, "total_odds": -110,
-            "h_ml": +105, "a_ml": -125
+            "home": "MIN", "away": "LAC", "time": "8:00 PM", "h_rec": "Live", "a_rec": "Live", 
+            "book_spread": -10.5, "spread_odds": -110, # Wolves -10.5
+            "book_total": 225.5, "total_odds": -110,
+            "h_ml": -475, "a_ml": +350
         },
         {
-            "home": "CHI", "away": "IND", "time": "8:00 PM", "h_rec": "9-13", "a_rec": "9-13", 
-            "book_spread": -4.5, "spread_odds": -110, 
-            "book_total": 237.5, "total_odds": -110,
-            "h_ml": -185, "a_ml": +155
-        },
-        {
-            "home": "MIL", "away": "PHI", "time": "8:00 PM", "h_rec": "10-11", "a_rec": "14-7", 
-            "book_spread": 1.5, "spread_odds": -110, # Sixers favored on road (-1.5)
-            "book_total": 221.5, "total_odds": -110,
-            "h_ml": +100, "a_ml": -120
-        },
-        {
-            "home": "HOU", "away": "PHX", "time": "8:00 PM", "h_rec": "15-6", "a_rec": "12-8", 
-            "book_spread": -10.5, "spread_odds": -115, 
-            "book_total": 220.5, "total_odds": -110,
-            "h_ml": -500, "a_ml": +375
+            "home": "MIA", "away": "SAC", "time": "8:00 PM", "h_rec": "Live", "a_rec": "Live", 
+            "book_spread": -8.0, "spread_odds": -110, # Heat -8
+            "book_total": 239.5, "total_odds": -110,
+            "h_ml": -325, "a_ml": +250
         },
 
         # 8:30 PM EST
         {
-            "home": "OKC", "away": "DAL", "time": "8:30 PM", "h_rec": "17-4", "a_rec": "14-8", 
-            "book_spread": -15.0, "spread_odds": -115, 
-            "book_total": 230.5, "total_odds": -110,
-            "h_ml": -1100, "a_ml": +700
+            "home": "DAL", "away": "HOU", "time": "8:30 PM", "h_rec": "Live", "a_rec": "Live", 
+            "book_spread": 8.5, "spread_odds": -105, # Mavs +8.5 (Rockets Favored)
+            "book_total": 224.5, "total_odds": -110,
+            "h_ml": +300, "a_ml": -400
         },
     ]
 
@@ -148,11 +120,11 @@ def get_matchup_projection(home, away):
     h_rat = 5
     a_rat = 5
     
-    # Power Rankings (Updated Dec 6)
-    tier_1 = ["BOS", "OKC", "CLE", "HOU", "ORL"] 
-    tier_2 = ["MEM", "NYK", "DAL", "DEN", "LAL"] 
-    tier_3 = ["MIA", "LAC", "GSW", "PHX", "MIL", "ATL", "PHI"] 
-    tier_4 = ["CHI", "IND", "DET", "POR", "SAS", "TOR", "CHA", "UTA", "WAS"]
+    # Dynamic Power Rankings (Updated Dec 6)
+    tier_1 = ["BOS", "OKC", "CLE", "HOU", "ORL", "DET"] # Added DET to T1 based on -12.5 line
+    tier_2 = ["MEM", "NYK", "DAL", "DEN", "LAL", "MIN", "MIA"] 
+    tier_3 = ["LAC", "GSW", "PHX", "MIL", "ATL", "PHI", "BKN"] 
+    tier_4 = ["CHI", "IND", "POR", "SAS", "TOR", "CHA", "UTA", "WAS", "NOP", "SAC"]
     
     def get_rating(team):
         if team in tier_1: return 10
