@@ -31,7 +31,6 @@ def train_nba_model():
         model_total = Ridge()
         scaler = StandardScaler()
         
-        # Mock fit to ensure objects exist
         X_mock = np.array([[0,0], [10,10]])
         y_win = np.array([0, 1])
         y_spread = np.array([-5, 5])
@@ -60,51 +59,115 @@ def load_brain_engine():
 def get_todays_games():
     """
     Returns exact games with Moneyline (ML) and Spread Odds.
-    STATUS: CLEAN SLATE FOR DEC 6 - ENTER GAMES BELOW
+    UPDATED: DEC 6, 2025
     """
     return [
-        # TEMPLATE: COPY AND PASTE FOR EACH GAME TODAY
+        # 7:00 PM EST
         {
-            "home": "HOME_TEAM", "away": "AWAY_TEAM", "time": "7:00 PM", 
-            "h_rec": "0-0", "a_rec": "0-0", 
-            "book_spread": -5.5, "spread_odds": -110, 
-            "book_total": 225.0, "total_odds": -110,
-            "h_ml": -200, "a_ml": +170
+            "home": "BOS", "away": "LAL", "time": "7:00 PM", "h_rec": "19-3", "a_rec": "12-10", 
+            "book_spread": -8.5, "spread_odds": -110, 
+            "book_total": 228.0, "total_odds": -110,
+            "h_ml": -325, "a_ml": +250
         },
-        
-        # EXAMPLE: (Replace this with a real game)
         {
-            "home": "MIN", "away": "GSW", "time": "8:00 PM", 
-            "h_rec": "16-4", "a_rec": "10-11", 
-            "book_spread": -6.5, "spread_odds": -110, 
+            "home": "ORL", "away": "MIA", "time": "7:00 PM", "h_rec": "16-6", "a_rec": "11-9", 
+            "book_spread": -5.5, "spread_odds": -110, 
+            "book_total": 241.0, "total_odds": -110,
+            "h_ml": -220, "a_ml": +170
+        },
+
+        # 7:30 PM EST
+        {
+            "home": "NYK", "away": "UTA", "time": "7:30 PM", "h_rec": "13-7", "a_rec": "7-13", 
+            "book_spread": -15.5, "spread_odds": -115, 
+            "book_total": 241.5, "total_odds": -110,
+            "h_ml": -1200, "a_ml": +750
+        },
+        {
+            "home": "CLE", "away": "SAS", "time": "7:30 PM", "h_rec": "19-3", "a_rec": "11-10", 
+            "book_spread": -3.5, "spread_odds": -110, 
+            "book_total": 238.5, "total_odds": -110,
+            "h_ml": -160, "a_ml": +135
+        },
+        {
+            "home": "TOR", "away": "CHA", "time": "7:30 PM", "h_rec": "7-15", "a_rec": "6-14", 
+            "book_spread": -7.0, "spread_odds": -110, 
+            "book_total": 229.5, "total_odds": -110,
+            "h_ml": -275, "a_ml": +200
+        },
+        {
+            "home": "ATL", "away": "DEN", "time": "7:30 PM", "h_rec": "11-11", "a_rec": "11-8", 
+            "book_spread": 5.0, "spread_odds": -120, # Nuggets favored on road (-5)
+            "book_total": 238.0, "total_odds": -115,
+            "h_ml": +170, "a_ml": -220
+        },
+        {
+            "home": "DET", "away": "POR", "time": "7:30 PM", "h_rec": "9-14", "a_rec": "8-13", 
+            "book_spread": -7.5, "spread_odds": -110, 
+            "book_total": 235.5, "total_odds": -115,
+            "h_ml": -325, "a_ml": +250
+        },
+
+        # 8:00 PM EST
+        {
+            "home": "MEM", "away": "LAC", "time": "8:00 PM", "h_rec": "15-7", "a_rec": "13-9", 
+            "book_spread": 1.5, "spread_odds": -110, # Clippers favored on road (-1.5)
+            "book_total": 223.5, "total_odds": -110,
+            "h_ml": +105, "a_ml": -125
+        },
+        {
+            "home": "CHI", "away": "IND", "time": "8:00 PM", "h_rec": "9-13", "a_rec": "9-13", 
+            "book_spread": -4.5, "spread_odds": -110, 
+            "book_total": 237.5, "total_odds": -110,
+            "h_ml": -185, "a_ml": +155
+        },
+        {
+            "home": "MIL", "away": "PHI", "time": "8:00 PM", "h_rec": "10-11", "a_rec": "14-7", 
+            "book_spread": 1.5, "spread_odds": -110, # Sixers favored on road (-1.5)
+            "book_total": 221.5, "total_odds": -110,
+            "h_ml": +100, "a_ml": -120
+        },
+        {
+            "home": "HOU", "away": "PHX", "time": "8:00 PM", "h_rec": "15-6", "a_rec": "12-8", 
+            "book_spread": -10.5, "spread_odds": -115, 
             "book_total": 220.5, "total_odds": -110,
-            "h_ml": -260, "a_ml": +210
+            "h_ml": -500, "a_ml": +375
+        },
+
+        # 8:30 PM EST
+        {
+            "home": "OKC", "away": "DAL", "time": "8:30 PM", "h_rec": "17-4", "a_rec": "14-8", 
+            "book_spread": -15.0, "spread_odds": -115, 
+            "book_total": 230.5, "total_odds": -110,
+            "h_ml": -1100, "a_ml": +700
         },
     ]
 
 # --- 4. PREDICTION LOGIC ---
 def get_matchup_projection(home, away):
-    # Dynamic Tier System
-    tier_1 = ["BOS", "MIN", "OKC", "DEN", "PHI", "MIL"] 
-    tier_2 = ["LAL", "NYK", "MIA", "SAC", "IND", "NOP", "ORL", "CLE"] 
-    tier_3 = ["GSW", "HOU", "BKN", "UTA", "TOR", "DAL", "PHX"] 
-    tier_4 = ["ATL", "CHI", "CHA", "POR", "MEM", "WAS", "DET", "SAS"]
+    h_rat = 5
+    a_rat = 5
+    
+    # Power Rankings (Updated Dec 6)
+    tier_1 = ["BOS", "OKC", "CLE", "HOU", "ORL"] 
+    tier_2 = ["MEM", "NYK", "DAL", "DEN", "LAL"] 
+    tier_3 = ["MIA", "LAC", "GSW", "PHX", "MIL", "ATL", "PHI"] 
+    tier_4 = ["CHI", "IND", "DET", "POR", "SAS", "TOR", "CHA", "UTA", "WAS"]
     
     def get_rating(team):
         if team in tier_1: return 10
-        if team in tier_2: return 5
-        if team in tier_3: return 0
-        return -6 
+        if team in tier_2: return 6
+        if team in tier_3: return 2
+        return -5 
 
-    h_rat = get_rating(home) + 3 
+    h_rat = get_rating(home) + 3 # Home Court
     a_rat = get_rating(away)
     
     raw_spread = a_rat - h_rat 
     
-    # Calculate implied Moneyline Probability (Sigmoid)
     win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
     
-    # Projected Score
+    # Scoring
     base_total = 230
     if home in tier_1 or away in tier_1: base_total -= 3 
     if home in tier_4 or away in tier_4: base_total += 3
