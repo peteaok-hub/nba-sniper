@@ -1,5 +1,5 @@
-# NBA SNIPER INTELLIGENCE ENGINE V9.0 (FATIGUE & REST PROTOCOL)
-# STATUS: MANUAL ENTRY + ADVANCED REST LOGIC
+# NBA SNIPER INTELLIGENCE ENGINE V9.1 (REST & FATIGUE MASTER)
+# STATUS: MANUAL ENTRY + FATIGUE ALGORITHM
 import pandas as pd
 import numpy as np
 import os
@@ -55,133 +55,133 @@ def load_brain_engine():
         pkg = train_nba_model()
         return pd.read_csv(DATA_FILE), pkg
 
-# --- 3. TARGETING FEED (REST & STREAK) ---
+# --- 3. TARGETING FEED (DEC 7 SLATE) ---
 def get_todays_games():
     """
-    MANUAL ENTRY ZONE.
-    Update daily with lines AND Rest Situations.
-    'rest': 0 (B2B), 1 (1 day off), 2 (2 days off), 3+ (Rested)
+    MANUAL ENTRY ZONE (DEC 7).
+    CRITICAL: Update 'rest' values based on yesterday's games!
+    0 = Played Yesterday (B2B)
+    1 = 1 Day Rest
     """
     return [
-        # GAME 1: PELICANS @ NETS
+        # 12:00 PM
         {
-            "home": "BKN", "away": "NOP", "time": "5:00 PM", 
-            "h_rec": "9-13", "h_strk": "W1", "h_rest": 1, 
-            "a_rec": "4-18", "a_strk": "L8", "a_rest": 0, # Pelicans on B2B
-            "book_spread": -3.5, "spread_odds": -110, 
-            "book_total": 227.0, "total_odds": -110,
-            "h_ml": -160, "a_ml": +135
+            "home": "NYK", "away": "ORL", "time": "12:00 PM", 
+            "h_rec": "15-7", "h_rest": 1, # Verify Rest
+            "a_rec": "14-9", "a_rest": 1, 
+            "book_spread": -4.0, "spread_odds": -110, 
+            "book_total": 232.0, "total_odds": -110,
+            "h_ml": -170, "a_ml": +140
         },
 
-        # GAME 2: HAWKS @ WIZARDS
+        # 3:30 PM
         {
-            "home": "WAS", "away": "ATL", "time": "7:00 PM", 
-            "h_rec": "3-17", "h_strk": "L14", "h_rest": 0, # Wizards on B2B
-            "a_rec": "11-11", "a_strk": "W2", "a_rest": 1,
-            "book_spread": 9.0, "spread_odds": -105, # Wizards +9
-            "book_total": 235.0, "total_odds": -110,
-            "h_ml": +325, "a_ml": -450
+            "home": "TOR", "away": "BOS", "time": "3:30 PM", 
+            "h_rec": "15-9", "h_rest": 1, 
+            "a_rec": "14-9", "a_rest": 1, 
+            "book_spread": 2.5, "spread_odds": -105, # Celtics -2.5
+            "book_total": 226.5, "total_odds": -110,
+            "h_ml": +120, "a_ml": -140
         },
 
-        # GAME 3: BUCKS @ PISTONS
+        # 6:00 PM
         {
-            "home": "DET", "away": "MIL", "time": "7:30 PM", 
-            "h_rec": "9-14", "h_strk": "L2", "h_rest": 1,
-            "a_rec": "10-11", "a_strk": "W1", "a_rest": 1,
-            "book_spread": -12.5, "spread_odds": -115, # Bucks -12.5
-            "book_total": 223.0, "total_odds": -110,
-            "h_ml": +475, "a_ml": -700
+            "home": "CHA", "away": "DEN", "time": "6:00 PM", 
+            "h_rec": "7-16", "h_rest": 1,
+            "a_rec": "16-6", "a_rest": 1, 
+            "book_spread": 10.5, "spread_odds": -110, # Nuggets -10.5
+            "book_total": 233.5, "total_odds": -110,
+            "h_ml": +375, "a_ml": -500
+        },
+        {
+            "home": "MEM", "away": "POR", "time": "6:00 PM", 
+            "h_rec": "10-13", "h_rest": 1,
+            "a_rec": "9-14", "a_rest": 0, # Blazers on B2B (Played DET yesterday)
+            "book_spread": -1.0, "spread_odds": -110, 
+            "book_total": 233.5, "total_odds": -110,
+            "h_ml": -115, "a_ml": -105
         },
 
-        # GAME 4: WARRIORS @ CAVALIERS
+        # 7:00 PM
         {
-            "home": "CLE", "away": "GSW", "time": "7:30 PM", 
-            "h_rec": "19-3", "h_strk": "W2", "h_rest": 0, # Cavs B2B
-            "a_rec": "12-9", "a_strk": "L4", "a_rest": 0, # Warriors B2B
-            "book_spread": -8.0, "spread_odds": -110, 
+            "home": "CHI", "away": "GSW", "time": "7:00 PM", 
+            "h_rec": "9-13", "h_rest": 1,
+            "a_rec": "12-12", "a_rest": 1, 
+            "book_spread": 1.0, "spread_odds": -110, # Warriors -1
             "book_total": 227.5, "total_odds": -110,
-            "h_ml": -325, "a_ml": +250
+            "h_ml": -105, "a_ml": -115
         },
 
-        # GAME 5: CLIPPERS @ TIMBERWOLVES
+        # 7:30 PM
         {
-            "home": "MIN", "away": "LAC", "time": "8:00 PM", 
-            "h_rec": "16-6", "h_strk": "W2", "h_rest": 1,
-            "a_rec": "13-9", "a_strk": "L1", "a_rest": 2,
-            "book_spread": -10.5, "spread_odds": -110, 
-            "book_total": 225.5, "total_odds": -110,
-            "h_ml": -475, "a_ml": +350
+            "home": "PHI", "away": "LAL", "time": "7:30 PM", 
+            "h_rec": "13-9", "h_rest": 1,
+            "a_rec": "16-6", "a_rest": 1, 
+            "book_spread": 4.0, "spread_odds": -110, # Lakers -4
+            "book_total": 235.5, "total_odds": -110,
+            "h_ml": +145, "a_ml": -175
         },
-
-        # GAME 6: KINGS @ HEAT
+        
+        # 8:00 PM
         {
-            "home": "MIA", "away": "SAC", "time": "8:00 PM", 
-            "h_rec": "11-9", "h_strk": "W1", "h_rest": 1,
-            "a_rec": "10-12", "a_strk": "L1", "a_rest": 0, # Kings B2B
-            "book_spread": -8.0, "spread_odds": -110, 
-            "book_total": 239.5, "total_odds": -110,
-            "h_ml": -325, "a_ml": +250
-        },
-
-        # GAME 7: ROCKETS @ MAVERICKS
-        {
-            "home": "DAL", "away": "HOU", "time": "8:30 PM", 
-            "h_rec": "14-8", "h_strk": "W4", "h_rest": 0, # Mavs B2B
-            "a_rec": "15-6", "a_strk": "W3", "a_rest": 0, # Rockets B2B
-            "book_spread": 8.5, "spread_odds": -105, # Mavs +8.5
-            "book_total": 224.5, "total_odds": -110,
-            "h_ml": +300, "a_ml": -400
+            "home": "UTA", "away": "OKC", "time": "8:00 PM", 
+            "h_rec": "8-14", "h_rest": 1,
+            "a_rec": "22-1", "a_rest": 1, 
+            "book_spread": 10.5, "spread_odds": -110, # Thunder -10.5
+            "book_total": 239.0, "total_odds": -110,
+            "h_ml": +350, "a_ml": -475
         },
     ]
 
-# --- 4. PREDICTION LOGIC (FATIGUE ADJUSTED) ---
-def get_matchup_projection(game_data):
-    home = game_data['home']
-    away = game_data['away']
+# --- 4. PREDICTION LOGIC (THE CRUSHER V9.1) ---
+def get_matchup_projection(game_data, away_team_unused=None):
+    # HANDLING HYBRID INPUT (Works with both V6 and V9 app.py)
+    if isinstance(game_data, dict):
+        home = game_data['home']
+        away = game_data['away']
+    else:
+        home = game_data
+        away = away_team_unused
+        game_data = {'home': home, 'away': away} # Fallback for old apps
+
+    h_rat = 5
+    a_rat = 5
     
-    # Base Ratings
-    tier_1 = ["BOS", "OKC", "CLE", "HOU", "ORL", "DET"] 
-    tier_2 = ["MEM", "NYK", "DAL", "DEN", "LAL", "MIN", "MIA"] 
-    tier_3 = ["LAC", "GSW", "PHX", "MIL", "ATL", "PHI", "BKN"] 
-    tier_4 = ["CHI", "IND", "POR", "SAS", "TOR", "CHA", "UTA", "WAS", "NOP", "SAC"]
+    # Power Rankings (Tiered)
+    tier_1 = ["OKC", "BOS", "DEN", "LAL", "CLE", "HOU"] 
+    tier_2 = ["NYK", "ORL", "MEM", "DAL", "GSW", "TOR", "PHI"] 
+    tier_3 = ["MIN", "MIA", "LAC", "PHX", "MIL", "ATL", "CHI"] 
+    tier_4 = ["IND", "DET", "POR", "SAS", "CHA", "UTA", "WAS", "NOP", "SAC", "BKN"]
     
-    def get_base_rating(team):
+    def get_rating(team):
         if team in tier_1: return 10
         if team in tier_2: return 6
         if team in tier_3: return 2
         return -5 
 
-    h_rat = get_base_rating(home) + 3 # Home Court
-    a_rat = get_base_rating(away)
+    h_rat = get_rating(home) + 3 # Home Court
+    a_rat = get_rating(away)
     
     # --- FATIGUE ENGINE ---
-    # Apply penalties for Back-to-Backs (0 days rest)
+    # Penalty for 0 days rest (Back-to-Back)
     h_rest = game_data.get('h_rest', 1)
     a_rest = game_data.get('a_rest', 1)
     
-    if h_rest == 0: h_rat -= 3.5 # Tired legs hurt home shooting
-    if a_rest == 0: a_rat -= 4.5 # Road B2B is the hardest schedule spot
+    if h_rest == 0: h_rat -= 4.0 # Tired legs penalty
+    if a_rest == 0: a_rat -= 5.0 # Road B2B penalty (Severe)
     
-    # --- STREAK ENGINE ---
-    def parse_streak(s):
-        if "W" in s: return 1.5 
-        if "L" in s: return -1.5 
-        return 0
-    
-    h_rat += parse_streak(game_data.get('h_strk', ''))
-    a_rat += parse_streak(game_data.get('a_strk', ''))
-
-    # Final Calc
+    # --- CALCULATION ---
     raw_spread = a_rat - h_rat 
     win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
     
     # Visuals
-    h_emoji = "🔥" if "W" in game_data.get('h_strk', '') else "⚠️" if h_rest == 0 else ""
-    a_emoji = "🔥" if "W" in game_data.get('a_strk', '') else "⚠️" if a_rest == 0 else ""
+    h_emoji = "🔥" if get_rating(home) >= 6 else "⚠️" if h_rest == 0 else ""
+    a_emoji = "🔥" if get_rating(away) >= 6 else "⚠️" if a_rest == 0 else ""
     
-    # Scoring Adjustment (Tired teams score less)
+    # Scoring
     base_total = 230
-    if h_rest == 0 or a_rest == 0: base_total -= 5
+    if h_rest == 0 or a_rest == 0: base_total -= 6 # Tired teams shoot worse
+    if home in tier_1 or away in tier_1: base_total -= 2
     
     proj_h_score = (base_total / 2) - (raw_spread / 2)
     proj_a_score = (base_total / 2) + (raw_spread / 2)
