@@ -1,5 +1,5 @@
-# NBA SNIPER INTELLIGENCE ENGINE V9.1 (REST & FATIGUE MASTER)
-# STATUS: MANUAL ENTRY + FATIGUE ALGORITHM
+# NBA SNIPER INTELLIGENCE ENGINE V11.1 (SMART FATIGUE V2)
+# STATUS: MANUAL ENTRY + CORRECT CSV PARSER (HEADER=0)
 import pandas as pd
 import numpy as np
 import os
@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 DATA_FILE = "nba_games_processed.csv"
 MODEL_FILE = "nba_model_v1.pkl"
 HISTORY_FILE = "nba_betting_ledger.csv"
+MINUTES_FILE = "NBA-minutes.csv" 
 
 # --- 1. DATA ENGINE ---
 def update_nba_data():
@@ -55,103 +56,103 @@ def load_brain_engine():
         pkg = train_nba_model()
         return pd.read_csv(DATA_FILE), pkg
 
-# --- 3. TARGETING FEED (DEC 7 SLATE) ---
+# --- 3. FATIGUE ANALYSIS (V11.1 PARSER) ---
+def get_team_fatigue(team_abbr):
+    """
+    Parses NBA-minutes.csv. 
+    V11.1 Update: Default to header=0 because user file has direct headers.
+    """
+    penalty = 0
+    tired_players = []
+    
+    if not os.path.exists(MINUTES_FILE): return 0, []
+
+    try:
+        # Standard Read (Row 0 is Header)
+        df = pd.read_csv(MINUTES_FILE, header=0)
+        
+        # Fallback if L3 is missing (Double Header check)
+        if 'L3' not in df.columns:
+             df = pd.read_csv(MINUTES_FILE, header=1)
+        
+        # Ensure we have the right columns
+        if 'Team' in df.columns and 'L3' in df.columns:
+            team_df = df[df['Team'] == team_abbr]
+            
+            for index, row in team_df.iterrows():
+                try:
+                    # Clean data (remove commas/spaces)
+                    l3_val = str(row['L3']).replace(',', '').strip()
+                    if not l3_val or l3_val == '-': continue
+                    
+                    l3_mins = float(l3_val)
+                    player = row['Player']
+                    
+                    # FATIGUE THRESHOLDS
+                    if l3_mins >= 38.0:
+                        penalty += 1.5 
+                        tired_players.append(f"{player} ({l3_mins}m 🚨)")
+                    elif l3_mins >= 35.0:
+                        penalty += 0.5 
+                        tired_players.append(f"{player} ({l3_mins}m)")
+                except: pass
+    except Exception as e:
+        print(f"Fatigue Parse Error: {e}")
+        
+    return penalty, tired_players
+
+# --- 4. TARGETING FEED (DEC 8) ---
 def get_todays_games():
     """
-    MANUAL ENTRY ZONE (DEC 7).
-    CRITICAL: Update 'rest' values based on yesterday's games!
-    0 = Played Yesterday (B2B)
-    1 = 1 Day Rest
+    MANUAL ENTRY (DEC 8).
+    Rest: 0 = Played Yesterday.
     """
     return [
-        # 12:00 PM
+        # 7:00 PM EST
         {
-            "home": "NYK", "away": "ORL", "time": "12:00 PM", 
-            "h_rec": "15-7", "h_rest": 1, # Verify Rest
-            "a_rec": "14-9", "a_rest": 1, 
-            "book_spread": -4.0, "spread_odds": -110, 
-            "book_total": 232.0, "total_odds": -110,
-            "h_ml": -170, "a_ml": +140
-        },
-
-        # 3:30 PM
-        {
-            "home": "TOR", "away": "BOS", "time": "3:30 PM", 
-            "h_rec": "15-9", "h_rest": 1, 
-            "a_rec": "14-9", "a_rest": 1, 
-            "book_spread": 2.5, "spread_odds": -105, # Celtics -2.5
-            "book_total": 226.5, "total_odds": -110,
-            "h_ml": +120, "a_ml": -140
-        },
-
-        # 6:00 PM
-        {
-            "home": "CHA", "away": "DEN", "time": "6:00 PM", 
-            "h_rec": "7-16", "h_rest": 1,
-            "a_rec": "16-6", "a_rest": 1, 
-            "book_spread": 10.5, "spread_odds": -110, # Nuggets -10.5
+            "home": "IND", "away": "SAC", "time": "7:00 PM", 
+            "h_rec": "9-14", "h_rest": 0, "h_pace": 105.3, 
+            "a_rec": "10-13", "a_rest": 0, "a_pace": 105.0, 
+            "book_spread": -3.5, "spread_odds": -110, 
             "book_total": 233.5, "total_odds": -110,
-            "h_ml": +375, "a_ml": -500
-        },
-        {
-            "home": "MEM", "away": "POR", "time": "6:00 PM", 
-            "h_rec": "10-13", "h_rest": 1,
-            "a_rec": "9-14", "a_rest": 0, # Blazers on B2B (Played DET yesterday)
-            "book_spread": -1.0, "spread_odds": -110, 
-            "book_total": 233.5, "total_odds": -110,
-            "h_ml": -115, "a_ml": -105
+            "h_ml": -162, "a_ml": +136
         },
 
-        # 7:00 PM
+        # 7:30 PM EST
         {
-            "home": "CHI", "away": "GSW", "time": "7:00 PM", 
-            "h_rec": "9-13", "h_rest": 1,
-            "a_rec": "12-12", "a_rest": 1, 
-            "book_spread": 1.0, "spread_odds": -110, # Warriors -1
+            "home": "MIN", "away": "PHX", "time": "7:30 PM", 
+            "h_rec": "15-8", "h_rest": 0, "h_pace": 104.9, 
+            "a_rec": "13-10", "a_rest": 0, "a_pace": 103.2, 
+            "book_spread": -9.5, "spread_odds": -110, 
             "book_total": 227.5, "total_odds": -110,
-            "h_ml": -105, "a_ml": -115
+            "h_ml": -420, "a_ml": +330 
         },
 
-        # 7:30 PM
+        # 8:00 PM EST
         {
-            "home": "PHI", "away": "LAL", "time": "7:30 PM", 
-            "h_rec": "13-9", "h_rest": 1,
-            "a_rec": "16-6", "a_rest": 1, 
-            "book_spread": 4.0, "spread_odds": -110, # Lakers -4
-            "book_total": 235.5, "total_odds": -110,
-            "h_ml": +145, "a_ml": -175
-        },
-        
-        # 8:00 PM
-        {
-            "home": "UTA", "away": "OKC", "time": "8:00 PM", 
-            "h_rec": "8-14", "h_rest": 1,
-            "a_rec": "22-1", "a_rest": 1, 
-            "book_spread": 10.5, "spread_odds": -110, # Thunder -10.5
-            "book_total": 239.0, "total_odds": -110,
-            "h_ml": +350, "a_ml": -475
+            "home": "NOP", "away": "SAS", "time": "8:00 PM", 
+            "h_rec": "3-21", "h_rest": 2, "h_pace": 104.1, 
+            "a_rec": "15-7", "a_rest": 1, "a_pace": 103.5, 
+            "book_spread": 4.5, "spread_odds": -110, 
+            "book_total": 228.5, "total_odds": -110,
+            "h_ml": +160, "a_ml": -190
         },
     ]
 
-# --- 4. PREDICTION LOGIC (THE CRUSHER V9.1) ---
+# --- 5. PREDICTION LOGIC ---
 def get_matchup_projection(game_data, away_team_unused=None):
-    # HANDLING HYBRID INPUT (Works with both V6 and V9 app.py)
     if isinstance(game_data, dict):
-        home = game_data['home']
-        away = game_data['away']
+        home = game_data['home']; away = game_data['away']
     else:
-        home = game_data
-        away = away_team_unused
-        game_data = {'home': home, 'away': away} # Fallback for old apps
+        home = game_data; away = away_team_unused
+        game_data = {'home': home, 'away': away}
 
-    h_rat = 5
-    a_rat = 5
+    h_rat = 5; a_rat = 5
     
-    # Power Rankings (Tiered)
     tier_1 = ["OKC", "BOS", "DEN", "LAL", "CLE", "HOU"] 
-    tier_2 = ["NYK", "ORL", "MEM", "DAL", "GSW", "TOR", "PHI"] 
-    tier_3 = ["MIN", "MIA", "LAC", "PHX", "MIL", "ATL", "CHI"] 
-    tier_4 = ["IND", "DET", "POR", "SAS", "CHA", "UTA", "WAS", "NOP", "SAC", "BKN"]
+    tier_2 = ["NYK", "ORL", "MEM", "DAL", "GSW", "TOR", "PHI", "MIN", "SAS"] 
+    tier_3 = ["LAC", "PHX", "MIL", "ATL", "CHI", "MIA"] 
+    tier_4 = ["IND", "DET", "POR", "CHA", "UTA", "WAS", "NOP", "SAC", "BKN"]
     
     def get_rating(team):
         if team in tier_1: return 10
@@ -159,40 +160,52 @@ def get_matchup_projection(game_data, away_team_unused=None):
         if team in tier_3: return 2
         return -5 
 
-    h_rat = get_rating(home) + 3 # Home Court
+    h_rat = get_rating(home) + 3 
     a_rat = get_rating(away)
     
-    # --- FATIGUE ENGINE ---
-    # Penalty for 0 days rest (Back-to-Back)
-    h_rest = game_data.get('h_rest', 1)
-    a_rest = game_data.get('a_rest', 1)
+    # Fatigue
+    h_rest = game_data.get('h_rest', 1); a_rest = game_data.get('a_rest', 1)
+    if h_rest == 0: h_rat -= 4.0 
+    if a_rest == 0: a_rat -= 5.0 
     
-    if h_rest == 0: h_rat -= 4.0 # Tired legs penalty
-    if a_rest == 0: a_rat -= 5.0 # Road B2B penalty (Severe)
+    h_fatigue, h_tired = get_team_fatigue(home)
+    a_fatigue, a_tired = get_team_fatigue(away)
     
-    # --- CALCULATION ---
+    if h_rest <= 1: h_rat -= h_fatigue
+    if a_rest <= 1: a_rat -= a_fatigue
+    
     raw_spread = a_rat - h_rat 
     win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
     
-    # Visuals
-    h_emoji = "🔥" if get_rating(home) >= 6 else "⚠️" if h_rest == 0 else ""
-    a_emoji = "🔥" if get_rating(away) >= 6 else "⚠️" if a_rest == 0 else ""
+    # Pace
+    h_pace = game_data.get('h_pace', 99.0); a_pace = game_data.get('a_pace', 99.0)
+    avg_pace = (h_pace + a_pace) / 2
     
-    # Scoring
     base_total = 230
-    if h_rest == 0 or a_rest == 0: base_total -= 6 # Tired teams shoot worse
-    if home in tier_1 or away in tier_1: base_total -= 2
+    pace_diff = avg_pace - 99.0
+    base_total += (pace_diff * 1.5)
+    
+    if h_rest == 0 or a_rest == 0: base_total -= 5
     
     proj_h_score = (base_total / 2) - (raw_spread / 2)
     proj_a_score = (base_total / 2) + (raw_spread / 2)
     
+    pace_emoji = "🚀" if avg_pace > 102 else "🐢" if avg_pace < 98 else "⚖️"
+    
+    h_emoji = "🔥" if get_rating(home) >= 6 else "⚠️" if h_rest == 0 else ""
+    a_emoji = "🔥" if get_rating(away) >= 6 else "⚠️" if a_rest == 0 else ""
+    
+    if len(h_tired) > 0 and h_rest <= 1: h_emoji += "🚑"
+    if len(a_tired) > 0 and a_rest <= 1: a_emoji += "🚑"
+
     return {
         "projected_spread": raw_spread,
         "projected_total": base_total,
         "win_prob": win_prob,
-        "score_str": f"{int(proj_a_score)} - {int(proj_h_score)}",
-        "h_emoji": h_emoji,
-        "a_emoji": a_emoji
+        "score_str": f"{int(proj_a_score)}-{int(proj_h_score)}",
+        "h_tired": h_tired, "a_tired": a_tired,
+        "pace_emoji": pace_emoji, "avg_pace": avg_pace,
+        "h_emoji": h_emoji, "a_emoji": a_emoji
     }
 
 def log_transaction(matchup, pick, wager, result="Pending"):
