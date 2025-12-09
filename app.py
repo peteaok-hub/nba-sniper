@@ -8,7 +8,7 @@ import importlib
 importlib.reload(brain)
 # ---------------------------
 
-st.set_page_config(page_title="SNIPER V11.1", page_icon="🏀", layout="wide")
+st.set_page_config(page_title="SNIPER V11.2", page_icon="🏀", layout="wide")
 
 # STYLES (Hard Rock Red/Dark Theme)
 st.markdown("""
@@ -54,7 +54,7 @@ except Exception as e:
 
 # SIDEBAR
 with st.sidebar:
-    st.title("🏀 SNIPER V11.1")
+    st.title("🏀 SNIPER V11.2")
     st.caption("Velocity & Fatigue Engine")
     if st.button("🔄 Refresh"): st.rerun()
     st.info("🚀 = Fast Pace | 🐢 = Slow Pace")

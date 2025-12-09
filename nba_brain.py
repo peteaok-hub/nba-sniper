@@ -1,5 +1,5 @@
-# NBA SNIPER INTELLIGENCE ENGINE V11.1 (SMART FATIGUE V2)
-# STATUS: MANUAL ENTRY + CORRECT CSV PARSER (HEADER=0)
+# NBA SNIPER INTELLIGENCE ENGINE V11.2 (DEC 9/10 TARGETS)
+# STATUS: MANUAL ENTRY + ADAPTIVE CSV + DEC 9/10 ODDS
 import pandas as pd
 import numpy as np
 import os
@@ -56,11 +56,10 @@ def load_brain_engine():
         pkg = train_nba_model()
         return pd.read_csv(DATA_FILE), pkg
 
-# --- 3. FATIGUE ANALYSIS (V11.1 PARSER) ---
+# --- 3. FATIGUE ANALYSIS (ADAPTIVE PARSER) ---
 def get_team_fatigue(team_abbr):
     """
-    Parses NBA-minutes.csv. 
-    V11.1 Update: Default to header=0 because user file has direct headers.
+    Robustly reads NBA-minutes.csv.
     """
     penalty = 0
     tired_players = []
@@ -68,27 +67,24 @@ def get_team_fatigue(team_abbr):
     if not os.path.exists(MINUTES_FILE): return 0, []
 
     try:
-        # Standard Read (Row 0 is Header)
+        # Attempt 1: Standard Read (Header is Row 0)
         df = pd.read_csv(MINUTES_FILE, header=0)
         
-        # Fallback if L3 is missing (Double Header check)
+        # Check if 'L3' is missing
         if 'L3' not in df.columns:
              df = pd.read_csv(MINUTES_FILE, header=1)
         
-        # Ensure we have the right columns
         if 'Team' in df.columns and 'L3' in df.columns:
             team_df = df[df['Team'] == team_abbr]
             
             for index, row in team_df.iterrows():
                 try:
-                    # Clean data (remove commas/spaces)
                     l3_val = str(row['L3']).replace(',', '').strip()
-                    if not l3_val or l3_val == '-': continue
+                    if l3_val == '' or l3_val == '-': continue
                     
                     l3_mins = float(l3_val)
                     player = row['Player']
                     
-                    # FATIGUE THRESHOLDS
                     if l3_mins >= 38.0:
                         penalty += 1.5 
                         tired_players.append(f"{player} ({l3_mins}m 🚨)")
@@ -98,44 +94,54 @@ def get_team_fatigue(team_abbr):
                 except: pass
     except Exception as e:
         print(f"Fatigue Parse Error: {e}")
+        pass 
         
     return penalty, tired_players
 
-# --- 4. TARGETING FEED (DEC 8) ---
+# --- 4. TARGETING FEED (DEC 9/10 SLATE) ---
 def get_todays_games():
     """
-    MANUAL ENTRY (DEC 8).
-    Rest: 0 = Played Yesterday.
+    MANUAL ENTRY (DEC 9/10).
+    'rest': 0 = B2B. 
+    'pace': Avg ~99.
     """
     return [
-        # 7:00 PM EST
+        # TODAY: DEC 9 (6:00 PM) - HEAT vs MAGIC
         {
-            "home": "IND", "away": "SAC", "time": "7:00 PM", 
-            "h_rec": "9-14", "h_rest": 0, "h_pace": 105.3, 
-            "a_rec": "10-13", "a_rest": 0, "a_pace": 105.0, 
-            "book_spread": -3.5, "spread_odds": -110, 
-            "book_total": 233.5, "total_odds": -110,
-            "h_ml": -162, "a_ml": +136
+            "home": "ORL", "away": "MIA", "time": "Tue 6:00 PM", 
+            "h_rec": "14-10", "h_rest": 1, "h_pace": 104.8, 
+            "a_rec": "14-10", "a_rest": 1, "a_pace": 109.1, # Heat playing surprisingly fast
+            "book_spread": -2.5, "spread_odds": -105, # Magic -2.5
+            "book_total": 232.5, "total_odds": -110,
+            "h_ml": -140, "a_ml": +120
         },
-
-        # 7:30 PM EST
+        # TODAY: DEC 9 (8:30 PM) - KNICKS vs RAPTORS
         {
-            "home": "MIN", "away": "PHX", "time": "7:30 PM", 
-            "h_rec": "15-8", "h_rest": 0, "h_pace": 104.9, 
-            "a_rec": "13-10", "a_rest": 0, "a_pace": 103.2, 
-            "book_spread": -9.5, "spread_odds": -110, 
-            "book_total": 227.5, "total_odds": -110,
-            "h_ml": -420, "a_ml": +330 
-        },
-
-        # 8:00 PM EST
-        {
-            "home": "NOP", "away": "SAS", "time": "8:00 PM", 
-            "h_rec": "3-21", "h_rest": 2, "h_pace": 104.1, 
-            "a_rec": "15-7", "a_rest": 1, "a_pace": 103.5, 
-            "book_spread": 4.5, "spread_odds": -110, 
+            "home": "TOR", "away": "NYK", "time": "Tue 8:30 PM", 
+            "h_rec": "15-10", "h_rest": 1, "h_pace": 103.7, 
+            "a_rec": "16-7", "a_rest": 1, "a_pace": 102.0, 
+            "book_spread": 4.5, "spread_odds": -105, # Knicks -4.5 (Raptors +4.5)
             "book_total": 228.5, "total_odds": -110,
             "h_ml": +160, "a_ml": -190
+        },
+
+        # WEDNESDAY: DEC 10 (7:30 PM) - THUNDER vs SUNS
+        {
+            "home": "OKC", "away": "PHX", "time": "Wed 7:30 PM", 
+            "h_rec": "23-1", "h_rest": 2, "h_pace": 104.6, 
+            "a_rec": "14-10", "a_rest": 1, "a_pace": 103.2, 
+            "book_spread": -16.5, "spread_odds": -115, # Thunder -16.5
+            "book_total": 224.5, "total_odds": -110,
+            "h_ml": -1600, "a_ml": +850
+        },
+        # WEDNESDAY: DEC 10 (7:30 PM) - LAKERS vs SPURS
+        {
+            "home": "LAL", "away": "SAS", "time": "Wed 7:30 PM", 
+            "h_rec": "17-6", "h_rest": 2, "h_pace": 102.2, 
+            "a_rec": "15-7", "a_rest": 1, "a_pace": 103.5, 
+            "book_spread": -4.0, "spread_odds": -115, # Lakers -4
+            "book_total": 235.5, "total_odds": -110,
+            "h_ml": -180, "a_ml": +150
         },
     ]
 
@@ -151,8 +157,8 @@ def get_matchup_projection(game_data, away_team_unused=None):
     
     tier_1 = ["OKC", "BOS", "DEN", "LAL", "CLE", "HOU"] 
     tier_2 = ["NYK", "ORL", "MEM", "DAL", "GSW", "TOR", "PHI", "MIN", "SAS"] 
-    tier_3 = ["LAC", "PHX", "MIL", "ATL", "CHI", "MIA"] 
-    tier_4 = ["IND", "DET", "POR", "CHA", "UTA", "WAS", "NOP", "SAC", "BKN"]
+    tier_3 = ["LAC", "PHX", "MIL", "ATL", "CHI", "MIA", "SAC", "IND"] 
+    tier_4 = ["DET", "POR", "CHA", "UTA", "WAS", "NOP", "BKN"]
     
     def get_rating(team):
         if team in tier_1: return 10
@@ -185,7 +191,7 @@ def get_matchup_projection(game_data, away_team_unused=None):
     pace_diff = avg_pace - 99.0
     base_total += (pace_diff * 1.5)
     
-    if h_rest == 0 or a_rest == 0: base_total -= 5
+    if h_rest == 0 or a_rest == 0: base_total -= 5 
     
     proj_h_score = (base_total / 2) - (raw_spread / 2)
     proj_a_score = (base_total / 2) + (raw_spread / 2)
