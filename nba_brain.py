@@ -1,5 +1,5 @@
-# NBA SNIPER INTELLIGENCE ENGINE V11.2 (DEC 9/10 TARGETS)
-# STATUS: MANUAL ENTRY + ADAPTIVE CSV + DEC 9/10 ODDS
+# NBA SNIPER INTELLIGENCE ENGINE V12.2 (TODAY'S SLATE UPDATE)
+# STATUS: MANUAL ENTRY + ADAPTIVE CSV
 import pandas as pd
 import numpy as np
 import os
@@ -13,6 +13,7 @@ DATA_FILE = "nba_games_processed.csv"
 MODEL_FILE = "nba_model_v1.pkl"
 HISTORY_FILE = "nba_betting_ledger.csv"
 MINUTES_FILE = "NBA-minutes.csv" 
+TEAM_STATS_FILE = "nba_team_stats.csv" 
 
 # --- 1. DATA ENGINE ---
 def update_nba_data():
@@ -32,6 +33,7 @@ def train_nba_model():
         model_total = Ridge()
         scaler = StandardScaler()
         
+        # Mock training data to initialize
         X_mock = np.array([[0,0], [10,10]])
         y_win = np.array([0, 1])
         y_spread = np.array([-5, 5])
@@ -56,96 +58,100 @@ def load_brain_engine():
         pkg = train_nba_model()
         return pd.read_csv(DATA_FILE), pkg
 
-# --- 3. FATIGUE ANALYSIS (ADAPTIVE PARSER) ---
+# --- 3. AUTOMATED STATS LOOKUP ---
+def get_team_pace(team_name):
+    """
+    Reads Pace from the scraped nba_team_stats.csv.
+    """
+    if not os.path.exists(TEAM_STATS_FILE): return 99.0 
+    
+    try:
+        df = pd.read_csv(TEAM_STATS_FILE)
+        # Map Abbr to Hollinger Name (e.g. MIA -> Miami)
+        abbr_map = {
+            "MIA": "Miami", "ORL": "Orlando", "NYK": "New York", "TOR": "Toronto",
+            "OKC": "Oklahoma City", "PHX": "Phoenix", "LAL": "LA Lakers", "SAS": "San Antonio",
+            "IND": "Indiana", "SAC": "Sacramento", "MIN": "Minnesota", "NOP": "New Orleans",
+            "BOS": "Boston", "DEN": "Denver", "GSW": "Golden State", "DAL": "Dallas",
+            "LAC": "LA Clippers", "HOU": "Houston", "MEM": "Memphis", "CLE": "Cleveland",
+            "MIL": "Milwaukee", "ATL": "Atlanta", "CHI": "Chicago", "PHI": "Philadelphia",
+            "BKN": "Brooklyn", "DET": "Detroit", "WAS": "Washington", "CHA": "Charlotte",
+            "POR": "Portland", "UTA": "Utah"
+        }
+        
+        full_name = abbr_map.get(team_name, team_name)
+        # Search for team string in the 'TEAM' column (case insensitive)
+        team_row = df[df['TEAM'].str.contains(full_name, case=False, na=False)]
+        
+        if not team_row.empty:
+            return float(team_row.iloc[0]['PACE'])
+            
+    except: pass
+    return 99.0 
+
+# --- 4. FATIGUE ANALYSIS ---
 def get_team_fatigue(team_abbr):
-    """
-    Robustly reads NBA-minutes.csv.
-    """
     penalty = 0
     tired_players = []
     
     if not os.path.exists(MINUTES_FILE): return 0, []
 
     try:
-        # Attempt 1: Standard Read (Header is Row 0)
+        # Standard Read
         df = pd.read_csv(MINUTES_FILE, header=0)
-        
-        # Check if 'L3' is missing
-        if 'L3' not in df.columns:
-             df = pd.read_csv(MINUTES_FILE, header=1)
+        # Fallback for double header
+        if 'L3' not in df.columns: df = pd.read_csv(MINUTES_FILE, header=1)
         
         if 'Team' in df.columns and 'L3' in df.columns:
             team_df = df[df['Team'] == team_abbr]
-            
             for index, row in team_df.iterrows():
                 try:
                     l3_val = str(row['L3']).replace(',', '').strip()
-                    if l3_val == '' or l3_val == '-': continue
-                    
+                    if not l3_val or l3_val == '-': continue
                     l3_mins = float(l3_val)
-                    player = row['Player']
-                    
                     if l3_mins >= 38.0:
                         penalty += 1.5 
-                        tired_players.append(f"{player} ({l3_mins}m 🚨)")
+                        tired_players.append(f"{row['Player']} ({l3_mins}m \u26A0)") # Unicode Warning
                     elif l3_mins >= 35.0:
                         penalty += 0.5 
-                        tired_players.append(f"{player} ({l3_mins}m)")
+                        tired_players.append(f"{row['Player']} ({l3_mins}m)")
                 except: pass
-    except Exception as e:
-        print(f"Fatigue Parse Error: {e}")
-        pass 
-        
+    except: pass
     return penalty, tired_players
 
-# --- 4. TARGETING FEED (DEC 9/10 SLATE) ---
+# --- 5. TARGETING FEED (TODAY'S SLATE) ---
 def get_todays_games():
     """
-    MANUAL ENTRY (DEC 9/10).
-    'rest': 0 = B2B. 
-    'pace': Avg ~99.
+    MANUAL MATCHUPS (UPDATED DEC 11).
+    PACE IS AUTOMATED via get_team_pace().
     """
-    return [
-        # TODAY: DEC 9 (6:00 PM) - HEAT vs MAGIC
-        {
-            "home": "ORL", "away": "MIA", "time": "Tue 6:00 PM", 
-            "h_rec": "14-10", "h_rest": 1, "h_pace": 104.8, 
-            "a_rec": "14-10", "a_rest": 1, "a_pace": 109.1, # Heat playing surprisingly fast
-            "book_spread": -2.5, "spread_odds": -105, # Magic -2.5
-            "book_total": 232.5, "total_odds": -110,
-            "h_ml": -140, "a_ml": +120
-        },
-        # TODAY: DEC 9 (8:30 PM) - KNICKS vs RAPTORS
-        {
-            "home": "TOR", "away": "NYK", "time": "Tue 8:30 PM", 
-            "h_rec": "15-10", "h_rest": 1, "h_pace": 103.7, 
-            "a_rec": "16-7", "a_rest": 1, "a_pace": 102.0, 
-            "book_spread": 4.5, "spread_odds": -105, # Knicks -4.5 (Raptors +4.5)
-            "book_total": 228.5, "total_odds": -110,
-            "h_ml": +160, "a_ml": -190
-        },
-
-        # WEDNESDAY: DEC 10 (7:30 PM) - THUNDER vs SUNS
-        {
-            "home": "OKC", "away": "PHX", "time": "Wed 7:30 PM", 
-            "h_rec": "23-1", "h_rest": 2, "h_pace": 104.6, 
-            "a_rec": "14-10", "a_rest": 1, "a_pace": 103.2, 
-            "book_spread": -16.5, "spread_odds": -115, # Thunder -16.5
-            "book_total": 224.5, "total_odds": -110,
-            "h_ml": -1600, "a_ml": +850
-        },
-        # WEDNESDAY: DEC 10 (7:30 PM) - LAKERS vs SPURS
-        {
-            "home": "LAL", "away": "SAS", "time": "Wed 7:30 PM", 
-            "h_rec": "17-6", "h_rest": 2, "h_pace": 102.2, 
-            "a_rec": "15-7", "a_rest": 1, "a_pace": 103.5, 
-            "book_spread": -4.0, "spread_odds": -115, # Lakers -4
-            "book_total": 235.5, "total_odds": -110,
-            "h_ml": -180, "a_ml": +150
-        },
+    games = [
+        # CELTICS vs BUCKS (8:00 PM)
+        {"home": "MIL", "away": "BOS", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": 9.0, "total": 223.5, "h_ml": 300}, # Bucks +9
+        
+        # BLAZERS vs PELICANS (8:00 PM)
+        {"home": "NOP", "away": "POR", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": -4.0, "total": 240.5, "h_ml": -175}, # Pels -4
+        
+        # CLIPPERS vs ROCKETS (8:00 PM)
+        {"home": "HOU", "away": "LAC", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": -9.5, "total": 221.5, "h_ml": -400}, # Rockets -9.5
+        
+        # NUGGETS vs KINGS (8:00 PM)
+        {"home": "SAC", "away": "DEN", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": 10.0, "total": 239.5, "h_ml": 350}, # Kings +10
+        
+        # KNICKS vs MAGIC (10:00 PM)
+        {"home": "ORL", "away": "NYK", "time": "10:00 PM", "h_rest": 1, "a_rest": 1, "spread": 4.5, "total": 224.0, "h_ml": 150}, # Magic +4.5
     ]
+    
+    # Inject Automated Pace and Format for Dashboard
+    for g in games:
+        g['h_pace'] = get_team_pace(g['home'])
+        g['a_pace'] = get_team_pace(g['away'])
+        g['book_spread'] = g['spread']
+        g['book_total'] = g['total']
+        
+    return games
 
-# --- 5. PREDICTION LOGIC ---
+# --- 6. PREDICTION LOGIC ---
 def get_matchup_projection(game_data, away_team_unused=None):
     if isinstance(game_data, dict):
         home = game_data['home']; away = game_data['away']
@@ -155,6 +161,7 @@ def get_matchup_projection(game_data, away_team_unused=None):
 
     h_rat = 5; a_rat = 5
     
+    # Tier List (Power Rankings)
     tier_1 = ["OKC", "BOS", "DEN", "LAL", "CLE", "HOU"] 
     tier_2 = ["NYK", "ORL", "MEM", "DAL", "GSW", "TOR", "PHI", "MIN", "SAS"] 
     tier_3 = ["LAC", "PHX", "MIL", "ATL", "CHI", "MIA", "SAC", "IND"] 
@@ -166,14 +173,15 @@ def get_matchup_projection(game_data, away_team_unused=None):
         if team in tier_3: return 2
         return -5 
 
-    h_rat = get_rating(home) + 3 
+    h_rat = get_rating(home) + 3 # Home Court Advantage
     a_rat = get_rating(away)
     
-    # Fatigue
+    # Rest Factor
     h_rest = game_data.get('h_rest', 1); a_rest = game_data.get('a_rest', 1)
     if h_rest == 0: h_rat -= 4.0 
     if a_rest == 0: a_rat -= 5.0 
     
+    # Fatigue Factor
     h_fatigue, h_tired = get_team_fatigue(home)
     a_fatigue, a_tired = get_team_fatigue(away)
     
@@ -183,7 +191,7 @@ def get_matchup_projection(game_data, away_team_unused=None):
     raw_spread = a_rat - h_rat 
     win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
     
-    # Pace
+    # Pace Calculation
     h_pace = game_data.get('h_pace', 99.0); a_pace = game_data.get('a_pace', 99.0)
     avg_pace = (h_pace + a_pace) / 2
     
@@ -196,13 +204,14 @@ def get_matchup_projection(game_data, away_team_unused=None):
     proj_h_score = (base_total / 2) - (raw_spread / 2)
     proj_a_score = (base_total / 2) + (raw_spread / 2)
     
-    pace_emoji = "🚀" if avg_pace > 102 else "🐢" if avg_pace < 98 else "⚖️"
+    # Safe Emoji Unicode
+    pace_emoji = "\U0001F680" if avg_pace > 102 else "\U0001F422" if avg_pace < 98 else "\u2696"
     
-    h_emoji = "🔥" if get_rating(home) >= 6 else "⚠️" if h_rest == 0 else ""
-    a_emoji = "🔥" if get_rating(away) >= 6 else "⚠️" if a_rest == 0 else ""
+    h_emoji = "\U0001F525" if get_rating(home) >= 6 else "\u26A0" if h_rest == 0 else ""
+    a_emoji = "\U0001F525" if get_rating(away) >= 6 else "\u26A0" if a_rest == 0 else ""
     
-    if len(h_tired) > 0 and h_rest <= 1: h_emoji += "🚑"
-    if len(a_tired) > 0 and a_rest <= 1: a_emoji += "🚑"
+    if len(h_tired) > 0 and h_rest <= 1: h_emoji += "\U0001F691"
+    if len(a_tired) > 0 and a_rest <= 1: a_emoji += "\U0001F691"
 
     return {
         "projected_spread": raw_spread,
