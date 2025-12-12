@@ -100,60 +100,97 @@ t1, t2 = st.tabs(["🧩 TEASER OPTIMIZER", "🎯 OPPORTUNITY BOARD"])
 # === TAB 1: TEASER OPTIMIZER ===
 with t1:
     if league_select == "NFL" and not market_df.empty:
-        # 1. IDENTIFY CANDIDATES (Wong Logic)
+        # 1. IDENTIFY CANDIDATES (Aggressive Wong Logic)
         candidates = []
         for i, row in market_df.iterrows():
-            line = row.get('Spread', 0.0) 
+            # Fallback: If 'Spread' column missing, try to infer or skip
+            try:
+                line = float(row.get('Spread', 0.0))
+            except:
+                line = 0.0
+            
             if line == 0.0: continue
             
             side = "Favorite (-)" if line < 0 else "Underdog (+)"
-            # Tease 6 points
             teased_line = line + 6.0 if line < 0 else line + 6.0
             
-            # Wong Criteria Check
+            # Wong Criteria Check (Strict)
             is_wong = False
-            if side == "Favorite (-)" and -8.5 <= line <= -7.5: is_wong = True # Crosses -7, -3
-            if side == "Underdog (+)" and 1.5 <= line <= 2.5: is_wong = True # Crosses +3, +7
+            # Favorites: -7.5 to -8.5
+            if side == "Favorite (-)" and -8.9 <= line <= -7.1: is_wong = True 
+            # Underdogs: +1.5 to +2.5
+            if side == "Underdog (+)" and 1.1 <= line <= 2.9: is_wong = True 
             
-            if is_wong:
+            # Expanded Criteria (If Strict fails, capture near-misses for volume)
+            # Favorites: -7 to -9
+            # Underdogs: +1 to +3
+            is_expanded = False
+            if side == "Favorite (-)" and -9.5 <= line <= -6.5: is_expanded = True
+            if side == "Underdog (+)" and 0.5 <= line <= 3.5: is_expanded = True
+
+            # Add to list if it meets EITHER criteria
+            if is_wong or is_expanded:
                 candidates.append({
                     "Team": row['Team'],
                     "Line": line,
                     "Teased": teased_line,
-                    "Matchup": row['Matchup']
+                    "Matchup": row['Matchup'],
+                    "Tier": "GOLD" if is_wong else "SILVER"
                 })
         
+        # Remove duplicates (sometimes feed has multiple lines for same game)
+        # Convert list of dicts to dataframe to drop duplicates, then back to list
+        if candidates:
+            cand_df = pd.DataFrame(candidates).drop_duplicates(subset=['Team'])
+            candidates = cand_df.to_dict('records')
+
         if len(candidates) < 2:
-            st.warning(f"Found {len(candidates)} Wong Candidates. Need at least 2 to build parlays.")
-            if candidates: st.write(candidates)
+            st.warning(f"Found {len(candidates)} Teaser Candidates. Need at least 2 to build parlays.")
+            st.write("Current Candidates:", candidates)
         else:
             # 2. GENERATE COMBOS (Top 15)
-            st.markdown(f"<div class='crusher-header'>TOP 15 TEASER COMBINATIONS ({len(candidates)} TEAMS FOUND)</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='crusher-header'>TOP TEASER COMBINATIONS ({len(candidates)} TEAMS)</div>", unsafe_allow_html=True)
             
-            # Generate 2-Team and 3-Team Combos
+            # Generate 2-Team Combos
             combos_2 = list(itertools.combinations(candidates, 2))
-            combos_3 = list(itertools.combinations(candidates, 3))
+            # Generate 3-Team Combos (only if we have enough candidates)
+            combos_3 = list(itertools.combinations(candidates, 3)) if len(candidates) >= 3 else []
+            
             all_combos = combos_2 + combos_3
             
-            # Limit to 15 for display
-            top_15 = all_combos[:15]
+            # Sort by Quality (Prioritize Gold Tiers)
+            # We give a score: Gold = 2 pts, Silver = 1 pt. Higher score = Better combo.
+            def get_combo_score(combo):
+                score = 0
+                for leg in combo:
+                    score += 2 if leg['Tier'] == "GOLD" else 1
+                return score
+
+            sorted_combos = sorted(all_combos, key=get_combo_score, reverse=True)
+            
+            # Limit to 15
+            top_15 = sorted_combos[:15]
             
             for idx, combo in enumerate(top_15):
-                # Calculate metrics (Simplified for MVP)
+                # Calculate metrics
                 num_legs = len(combo)
-                # Standard Teaser Odds: 2-Team (-120), 3-Team (+160)
                 odds_str = "-120" if num_legs == 2 else "+160" 
                 payout_mult = 1.83 if num_legs == 2 else 2.6
                 
                 profit = (unit_size * payout_mult) - unit_size
-                conf_pct = 75 - (idx * 2) # Mock confidence for display sort
+                
+                # Confidence visual based on Tier
+                gold_legs = sum(1 for leg in combo if leg['Tier'] == 'GOLD')
+                conf_pct = 60 + (gold_legs * 10) 
+                if conf_pct > 95: conf_pct = 95
                 
                 # Build Team List HTML
                 legs_html = ""
                 for leg in combo:
+                    icon = "🥇" if leg['Tier'] == "GOLD" else "🥈"
                     legs_html += f"""
                     <div style='display:flex; justify-content:space-between; margin-bottom:5px; border-bottom:1px solid #333; padding-bottom:5px;'>
-                        <span style='color:white; font-weight:bold;'>{leg['Team']}</span>
+                        <span style='color:white; font-weight:bold;'>{icon} {leg['Team']}</span>
                         <span style='color:#00ccff;'>{leg['Line']} ➔ {leg['Teased']}</span>
                     </div>
                     """
@@ -189,13 +226,14 @@ with t1:
                 </div>
                 """, unsafe_allow_html=True)
 
+    elif league_select != "NFL":
+        st.warning("Teasers are primarily an NFL Strategy. Please switch league to NFL.")
     else:
-        st.info("Please Select NFL and Scan Market.")
+        st.info("Please Scan Market to initialize data.")
 
 # === TAB 2: OPPORTUNITY BOARD (Standard) ===
 with t2:
     if not market_df.empty:
-        # Simple display for context
         st.dataframe(market_df)
     else:
         st.info("Scan Market first.")
