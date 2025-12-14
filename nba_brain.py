@@ -1,4 +1,4 @@
-# NBA SNIPER INTELLIGENCE ENGINE V12.2 (TODAY'S SLATE UPDATE)
+# NBA SNIPER INTELLIGENCE ENGINE V11.3 (SUNDAY SLATE UPDATE)
 # STATUS: MANUAL ENTRY + ADAPTIVE CSV
 import pandas as pd
 import numpy as np
@@ -119,27 +119,39 @@ def get_team_fatigue(team_abbr):
     except: pass
     return penalty, tired_players
 
-# --- 5. TARGETING FEED (TODAY'S SLATE) ---
+# --- 5. TARGETING FEED (SUNDAY SLATE) ---
 def get_todays_games():
     """
-    MANUAL MATCHUPS (UPDATED DEC 11).
+    MANUAL MATCHUPS (UPDATED SUNDAY).
     PACE IS AUTOMATED via get_team_pace().
     """
     games = [
-        # CELTICS vs BUCKS (8:00 PM)
-        {"home": "MIL", "away": "BOS", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": 9.0, "total": 223.5, "h_ml": 300}, # Bucks +9
+        # WIZARDS vs PACERS (3:00 PM)
+        {"home": "IND", "away": "WAS", "time": "3:00 PM", "h_rest": 1, "a_rest": 1, "spread": -9.5, "total": 234.5, "h_ml": -450}, # Pacers -9.5
         
-        # BLAZERS vs PELICANS (8:00 PM)
-        {"home": "NOP", "away": "POR", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": -4.0, "total": 240.5, "h_ml": -175}, # Pels -4
+        # HORNETS vs CAVALIERS (3:30 PM)
+        {"home": "CLE", "away": "CHA", "time": "3:30 PM", "h_rest": 1, "a_rest": 1, "spread": -11.5, "total": 231.5, "h_ml": -600}, # Cavs -11.5
         
-        # CLIPPERS vs ROCKETS (8:00 PM)
-        {"home": "HOU", "away": "LAC", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": -9.5, "total": 221.5, "h_ml": -400}, # Rockets -9.5
+        # BUCKS vs NETS (6:00 PM)
+        {"home": "BKN", "away": "MIL", "time": "6:00 PM", "h_rest": 1, "a_rest": 1, "spread": 1.5, "total": 217.5, "h_ml": 100}, # Nets +1.5 (Bucks -1.5)
         
-        # NUGGETS vs KINGS (8:00 PM)
-        {"home": "SAC", "away": "DEN", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": 10.0, "total": 239.5, "h_ml": 350}, # Kings +10
+        # 76ERS vs HAWKS (6:00 PM)
+        {"home": "ATL", "away": "PHI", "time": "6:00 PM", "h_rest": 1, "a_rest": 1, "spread": -5.0, "total": 224.5, "h_ml": -200}, # Hawks -5
         
-        # KNICKS vs MAGIC (10:00 PM)
-        {"home": "ORL", "away": "NYK", "time": "10:00 PM", "h_rest": 1, "a_rest": 1, "spread": 4.5, "total": 224.0, "h_ml": 150}, # Magic +4.5
+        # KINGS vs TIMBERWOLVES (7:00 PM)
+        {"home": "MIN", "away": "SAC", "time": "7:00 PM", "h_rest": 1, "a_rest": 1, "spread": -10.0, "total": 234.0, "h_ml": -500}, # Wolves -10
+        
+        # PELICANS vs BULLS (7:00 PM)
+        {"home": "CHI", "away": "NOP", "time": "7:00 PM", "h_rest": 1, "a_rest": 1, "spread": -4.5, "total": 248.0, "h_ml": -180}, # Bulls -4.5
+        
+        # LAKERS vs SUNS (8:00 PM)
+        {"home": "PHX", "away": "LAL", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": 1.0, "total": 231.0, "h_ml": -110}, # Suns +1 (Lakers -1)
+        
+        # WARRIORS vs BLAZERS (9:00 PM)
+        {"home": "POR", "away": "GSW", "time": "9:00 PM", "h_rest": 1, "a_rest": 1, "spread": 4.5, "total": 236.0, "h_ml": 160}, # Blazers +4.5 (GSW -4.5)
+        
+        # SPURS vs KNICKS (TUESDAY)
+        {"home": "NYK", "away": "SAS", "time": "TUES 8:30 PM", "h_rest": 2, "a_rest": 2, "spread": -2.5, "total": 228.5, "h_ml": -135}, # Knicks -2.5
     ]
     
     # Inject Automated Pace and Format for Dashboard
