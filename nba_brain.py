@@ -1,5 +1,5 @@
-# NBA SNIPER INTELLIGENCE ENGINE V11.3 (SUNDAY SLATE UPDATE)
-# STATUS: MANUAL ENTRY + ADAPTIVE CSV
+# NBA SNIPER INTELLIGENCE ENGINE V11.8 (MONDAY SLATE)
+# STATUS: TRAP PROTOCOL + WIN PROB + NEW ODDS
 import pandas as pd
 import numpy as np
 import os
@@ -15,7 +15,7 @@ HISTORY_FILE = "nba_betting_ledger.csv"
 MINUTES_FILE = "NBA-minutes.csv" 
 TEAM_STATS_FILE = "nba_team_stats.csv" 
 
-# --- 1. DATA ENGINE ---
+# --- 1. ENGINE INITIALIZATION ---
 def update_nba_data():
     if not os.path.exists(DATA_FILE):
         cols = ['game_id', 'date', 'home_team', 'away_team', 'home_score', 'away_score', 'h_mom', 'a_mom', 'h_off', 'a_off']
@@ -24,7 +24,6 @@ def update_nba_data():
         return df
     return pd.read_csv(DATA_FILE)
 
-# --- 2. BRAIN ENGINE ---
 def train_nba_model():
     if not os.path.exists(DATA_FILE): update_nba_data()
     try:
@@ -33,7 +32,7 @@ def train_nba_model():
         model_total = Ridge()
         scaler = StandardScaler()
         
-        # Mock training data to initialize
+        # Mock training data to initialize logic if file is missing
         X_mock = np.array([[0,0], [10,10]])
         y_win = np.array([0, 1])
         y_spread = np.array([-5, 5])
@@ -58,16 +57,31 @@ def load_brain_engine():
         pkg = train_nba_model()
         return pd.read_csv(DATA_FILE), pkg
 
-# --- 3. AUTOMATED STATS LOOKUP ---
-def get_team_pace(team_name):
+# --- 2. THE TRAP LIST (MANUAL OVERRIDES) ---
+# "Punish" teams that are statistically fine but playing poorly.
+# Value = Points to subtract from their Tier Rating.
+BIAS_CORRECTION = {
+    "MIL": -8.0,  # Bucks are broken. Downgrade heavily.
+    "IND": -6.0,  # Pacers choke against bad teams.
+    "CHI": -4.0,  # Bulls are inconsistent.
+    "PHX": -2.0,  # Suns are sliding.
+    "LAL": 1.0,   # Lakers are fighting (Bonus).
+    "MIN": 1.0    # Wolves are solid (Bonus).
+}
+
+# --- 3. DYNAMIC STATS ENGINE ---
+def get_team_metrics(team_name):
     """
-    Reads Pace from the scraped nba_team_stats.csv.
+    Retrieves Pace & Net Rating, then applies BIAS CORRECTION.
     """
-    if not os.path.exists(TEAM_STATS_FILE): return 99.0 
+    default_pace = 99.0
+    default_tier = 2 
+    
+    if not os.path.exists(TEAM_STATS_FILE): 
+        return default_pace, default_tier, 0.0
     
     try:
         df = pd.read_csv(TEAM_STATS_FILE)
-        # Map Abbr to Hollinger Name (e.g. MIA -> Miami)
         abbr_map = {
             "MIA": "Miami", "ORL": "Orlando", "NYK": "New York", "TOR": "Toronto",
             "OKC": "Oklahoma City", "PHX": "Phoenix", "LAL": "LA Lakers", "SAS": "San Antonio",
@@ -80,28 +94,40 @@ def get_team_pace(team_name):
         }
         
         full_name = abbr_map.get(team_name, team_name)
-        # Search for team string in the 'TEAM' column (case insensitive)
         team_row = df[df['TEAM'].str.contains(full_name, case=False, na=False)]
         
         if not team_row.empty:
-            return float(team_row.iloc[0]['PACE'])
+            pace = float(team_row.iloc[0]['PACE'])
+            off_eff = float(team_row.iloc[0]['OFF EFF'])
+            def_eff = float(team_row.iloc[0]['DEF EFF'])
+            net_rating = off_eff - def_eff
+            
+            # 1. Base Tier from Stats
+            if net_rating >= 7.0: tier = 10   
+            elif net_rating >= 3.0: tier = 7  
+            elif net_rating >= -2.0: tier = 4 
+            else: tier = -2                   
+            
+            # 2. Apply "Trap Protocol" Bias
+            if team_name in BIAS_CORRECTION:
+                bias = BIAS_CORRECTION[team_name]
+                tier += bias
+                # Adjust Net Rating for display purposes
+                net_rating += bias 
+
+            return pace, tier, net_rating
             
     except: pass
-    return 99.0 
+    return default_pace, default_tier, 0.0
 
 # --- 4. FATIGUE ANALYSIS ---
 def get_team_fatigue(team_abbr):
     penalty = 0
     tired_players = []
-    
     if not os.path.exists(MINUTES_FILE): return 0, []
-
     try:
-        # Standard Read
         df = pd.read_csv(MINUTES_FILE, header=0)
-        # Fallback for double header
         if 'L3' not in df.columns: df = pd.read_csv(MINUTES_FILE, header=1)
-        
         if 'Team' in df.columns and 'L3' in df.columns:
             team_df = df[df['Team'] == team_abbr]
             for index, row in team_df.iterrows():
@@ -110,54 +136,42 @@ def get_team_fatigue(team_abbr):
                     if not l3_val or l3_val == '-': continue
                     l3_mins = float(l3_val)
                     if l3_mins >= 38.0:
-                        penalty += 1.5 
-                        tired_players.append(f"{row['Player']} ({l3_mins}m \u26A0)") # Unicode Warning
+                        penalty += 1.5; tired_players.append(f"{row['Player']} ({l3_mins}m \u26A0)")
                     elif l3_mins >= 35.0:
-                        penalty += 0.5 
-                        tired_players.append(f"{row['Player']} ({l3_mins}m)")
+                        penalty += 0.5; tired_players.append(f"{row['Player']} ({l3_mins}m)")
                 except: pass
     except: pass
     return penalty, tired_players
 
-# --- 5. TARGETING FEED (SUNDAY SLATE) ---
+# --- 5. TARGETING FEED (MONDAY SLATE) ---
 def get_todays_games():
     """
-    MANUAL MATCHUPS (UPDATED SUNDAY).
-    PACE IS AUTOMATED via get_team_pace().
+    MONDAY SLATE - Manual Entry
     """
     games = [
-        # WIZARDS vs PACERS (3:00 PM)
-        {"home": "IND", "away": "WAS", "time": "3:00 PM", "h_rest": 1, "a_rest": 1, "spread": -9.5, "total": 234.5, "h_ml": -450}, # Pacers -9.5
+        # PISTONS vs CELTICS (7:00 PM) - Celtics -1.5
+        {"home": "BOS", "away": "DET", "time": "7:00 PM", "h_rest": 1, "a_rest": 1, "spread": -1.5, "total": 229.5},
         
-        # HORNETS vs CAVALIERS (3:30 PM)
-        {"home": "CLE", "away": "CHA", "time": "3:30 PM", "h_rest": 1, "a_rest": 1, "spread": -11.5, "total": 231.5, "h_ml": -600}, # Cavs -11.5
+        # RAPTORS vs HEAT (7:30 PM) - Heat -6
+        {"home": "MIA", "away": "TOR", "time": "7:30 PM", "h_rest": 1, "a_rest": 1, "spread": -6.0, "total": 235.0},
         
-        # BUCKS vs NETS (6:00 PM)
-        {"home": "BKN", "away": "MIL", "time": "6:00 PM", "h_rest": 1, "a_rest": 1, "spread": 1.5, "total": 217.5, "h_ml": 100}, # Nets +1.5 (Bucks -1.5)
+        # MAVERICKS vs JAZZ (9:00 PM) - Mavs -2.5 (Jazz +2.5)
+        {"home": "UTA", "away": "DAL", "time": "9:00 PM", "h_rest": 1, "a_rest": 1, "spread": 2.5, "total": 241.0},
         
-        # 76ERS vs HAWKS (6:00 PM)
-        {"home": "ATL", "away": "PHI", "time": "6:00 PM", "h_rest": 1, "a_rest": 1, "spread": -5.0, "total": 224.5, "h_ml": -200}, # Hawks -5
+        # ROCKETS vs NUGGETS (9:30 PM) - Nuggets -1
+        {"home": "DEN", "away": "HOU", "time": "9:30 PM", "h_rest": 1, "a_rest": 1, "spread": -1.0, "total": 237.5},
         
-        # KINGS vs TIMBERWOLVES (7:00 PM)
-        {"home": "MIN", "away": "SAC", "time": "7:00 PM", "h_rest": 1, "a_rest": 1, "spread": -10.0, "total": 234.0, "h_ml": -500}, # Wolves -10
+        # GRIZZLIES vs CLIPPERS (10:30 PM) - Clippers -4.5
+        {"home": "LAC", "away": "MEM", "time": "10:30 PM", "h_rest": 1, "a_rest": 1, "spread": -4.5, "total": 228.0},
         
-        # PELICANS vs BULLS (7:00 PM)
-        {"home": "CHI", "away": "NOP", "time": "7:00 PM", "h_rest": 1, "a_rest": 1, "spread": -4.5, "total": 248.0, "h_ml": -180}, # Bulls -4.5
-        
-        # LAKERS vs SUNS (8:00 PM)
-        {"home": "PHX", "away": "LAL", "time": "8:00 PM", "h_rest": 1, "a_rest": 1, "spread": 1.0, "total": 231.0, "h_ml": -110}, # Suns +1 (Lakers -1)
-        
-        # WARRIORS vs BLAZERS (9:00 PM)
-        {"home": "POR", "away": "GSW", "time": "9:00 PM", "h_rest": 1, "a_rest": 1, "spread": 4.5, "total": 236.0, "h_ml": 160}, # Blazers +4.5 (GSW -4.5)
-        
-        # SPURS vs KNICKS (TUESDAY)
-        {"home": "NYK", "away": "SAS", "time": "TUES 8:30 PM", "h_rest": 2, "a_rest": 2, "spread": -2.5, "total": 228.5, "h_ml": -135}, # Knicks -2.5
+        # SPURS vs KNICKS (TUESDAY/LATE) - Knicks -2.5
+        {"home": "NYK", "away": "SAS", "time": "TUES 8:30 PM", "h_rest": 2, "a_rest": 2, "spread": -2.5, "total": 228.5},
     ]
     
-    # Inject Automated Pace and Format for Dashboard
+    # Inject Stats
     for g in games:
-        g['h_pace'] = get_team_pace(g['home'])
-        g['a_pace'] = get_team_pace(g['away'])
+        g['h_pace'], g['h_tier'], g['h_net'] = get_team_metrics(g['home'])
+        g['a_pace'], g['a_tier'], g['a_net'] = get_team_metrics(g['away'])
         g['book_spread'] = g['spread']
         g['book_total'] = g['total']
         
@@ -170,60 +184,40 @@ def get_matchup_projection(game_data, away_team_unused=None):
     else:
         home = game_data; away = away_team_unused
         game_data = {'home': home, 'away': away}
+        game_data['h_pace'], game_data['h_tier'], _ = get_team_metrics(home)
+        game_data['a_pace'], game_data['a_tier'], _ = get_team_metrics(away)
 
-    h_rat = 5; a_rat = 5
-    
-    # Tier List (Power Rankings)
-    tier_1 = ["OKC", "BOS", "DEN", "LAL", "CLE", "HOU"] 
-    tier_2 = ["NYK", "ORL", "MEM", "DAL", "GSW", "TOR", "PHI", "MIN", "SAS"] 
-    tier_3 = ["LAC", "PHX", "MIL", "ATL", "CHI", "MIA", "SAC", "IND"] 
-    tier_4 = ["DET", "POR", "CHA", "UTA", "WAS", "NOP", "BKN"]
-    
-    def get_rating(team):
-        if team in tier_1: return 10
-        if team in tier_2: return 6
-        if team in tier_3: return 2
-        return -5 
-
-    h_rat = get_rating(home) + 3 # Home Court Advantage
-    a_rat = get_rating(away)
+    h_rat = game_data.get('h_tier', 2) + 2.5 
+    a_rat = game_data.get('a_tier', 2)
     
     # Rest Factor
     h_rest = game_data.get('h_rest', 1); a_rest = game_data.get('a_rest', 1)
     if h_rest == 0: h_rat -= 4.0 
     if a_rest == 0: a_rat -= 5.0 
     
-    # Fatigue Factor
+    # Fatigue
     h_fatigue, h_tired = get_team_fatigue(home)
     a_fatigue, a_tired = get_team_fatigue(away)
-    
     if h_rest <= 1: h_rat -= h_fatigue
     if a_rest <= 1: a_rat -= a_fatigue
     
     raw_spread = a_rat - h_rat 
+    
+    # Win Probability
     win_prob = 1 / (1 + np.exp(0.15 * raw_spread)) * 100
     
-    # Pace Calculation
+    # Total Logic
     h_pace = game_data.get('h_pace', 99.0); a_pace = game_data.get('a_pace', 99.0)
     avg_pace = (h_pace + a_pace) / 2
-    
-    base_total = 230
-    pace_diff = avg_pace - 99.0
-    base_total += (pace_diff * 1.5)
-    
+    base_total = 228 + ((avg_pace - 99.0) * 1.8) 
     if h_rest == 0 or a_rest == 0: base_total -= 5 
     
     proj_h_score = (base_total / 2) - (raw_spread / 2)
     proj_a_score = (base_total / 2) + (raw_spread / 2)
     
-    # Safe Emoji Unicode
-    pace_emoji = "\U0001F680" if avg_pace > 102 else "\U0001F422" if avg_pace < 98 else "\u2696"
-    
-    h_emoji = "\U0001F525" if get_rating(home) >= 6 else "\u26A0" if h_rest == 0 else ""
-    a_emoji = "\U0001F525" if get_rating(away) >= 6 else "\u26A0" if a_rest == 0 else ""
-    
-    if len(h_tired) > 0 and h_rest <= 1: h_emoji += "\U0001F691"
-    if len(a_tired) > 0 and a_rest <= 1: a_emoji += "\U0001F691"
+    pace_emoji = "\U0001F680" if avg_pace > 104 else "\U0001F422" if avg_pace < 98 else "\u2696"
+    h_emoji = "\U0001F4AA" if h_rat > 8 else "\u26A0" if h_rest == 0 else ""
+    a_emoji = "\U0001F4AA" if a_rat > 8 else "\u26A0" if a_rest == 0 else ""
 
     return {
         "projected_spread": raw_spread,
@@ -232,7 +226,8 @@ def get_matchup_projection(game_data, away_team_unused=None):
         "score_str": f"{int(proj_a_score)}-{int(proj_h_score)}",
         "h_tired": h_tired, "a_tired": a_tired,
         "pace_emoji": pace_emoji, "avg_pace": avg_pace,
-        "h_emoji": h_emoji, "a_emoji": a_emoji
+        "h_emoji": h_emoji, "a_emoji": a_emoji,
+        "h_net": game_data.get('h_net', 0), "a_net": game_data.get('a_net', 0) 
     }
 
 def log_transaction(matchup, pick, wager, result="Pending"):
