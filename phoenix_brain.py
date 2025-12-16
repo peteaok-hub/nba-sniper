@@ -1,201 +1,93 @@
-import streamlit as st
 import pandas as pd
-import itertools
-from phoenix_brain import MarketBrain
-import market_feed 
+import numpy as np
 
-# --- CONFIG ---
-st.set_page_config(page_title="FOX 7.2: TEASER OPTIMIZER", layout="wide", page_icon="🦊")
-brain = MarketBrain()
+class MarketBrain:
+    def __init__(self):
+        self.key_numbers = [3, 7]
 
-# --- STYLING (THE CRUSHER THEME) ---
-st.markdown("""
-    <style>
-    .stApp {background-color: #0e0e0e; color: #e0e0e0; font-family: 'Roboto', sans-serif;}
-    
-    /* HEADERS */
-    .crusher-header {
-        background: linear-gradient(90deg, #cc0000 0%, #ff3333 100%);
-        padding: 15px;
-        border-radius: 8px;
-        text-align: center;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        margin-bottom: 20px;
-        color: white;
-        box-shadow: 0 4px 15px rgba(255, 0, 0, 0.3);
-    }
-    
-    /* CARDS */
-    .crusher-card {
-        background-color: #1a1a1a;
-        border: 1px solid #333;
-        border-radius: 12px;
-        padding: 20px;
-        margin-bottom: 15px;
-        transition: transform 0.2s;
-    }
-    .crusher-card:hover { transform: translateY(-2px); border-color: #555; }
-    
-    /* METRICS */
-    .stat-box {
-        background-color: #252525;
-        border-radius: 6px;
-        padding: 10px;
-        text-align: center;
-        border-left: 3px solid #cc0000;
-    }
-    .stat-label { font-size: 0.7em; color: #888; text-transform: uppercase; }
-    .stat-value { font-size: 1.1em; font-weight: bold; color: white; }
-    
-    /* BAR */
-    .conf-bar-bg { background-color: #333; height: 6px; border-radius: 3px; margin-top: 8px; }
-    .conf-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #00ccff, #ffffff); }
-    
-    /* BUTTON */
-    .bet-btn {
-        background-color: #333;
-        color: white;
-        padding: 8px 20px;
-        border-radius: 6px;
-        text-align: center;
-        font-weight: bold;
-        border: 1px solid #555;
-        cursor: pointer;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-st.title("🦊 PHOENIX PROTOCOL: TEASER OPTIMIZER")
-
-# --- SIDEBAR ---
-with st.sidebar:
-    st.header("⚙️ GLOBAL CONFIG")
-    league_select = st.radio("Select Market", ["NFL", "NBA"], horizontal=True)
-    sport_key = 'americanfootball_nfl' if league_select == "NFL" else 'basketball_nba'
-    
-    st.markdown("---")
-    st.header("💰 MONEY MANAGER")
-    unit_size = st.number_input("Standard Unit ($)", value=100.0, step=10.0)
-    
-    if st.button(f"🔄 SCAN {league_select} MARKET"):
-        with st.spinner(f"Scanning Global Lines..."):
-            df = market_feed.fetch_live_market_data(sport_key)
-            if not df.empty:
-                df.to_csv("live_market.csv", index=False)
-                st.success("DATA UPDATED.")
-            else:
-                st.error("No active games found.")
-
-# --- LOAD DATA ---
-try:
-    market_df = pd.read_csv("live_market.csv")
-except:
-    market_df = pd.DataFrame()
-
-# --- TABS ---
-t1, t2 = st.tabs(["🧩 TEASER OPTIMIZER", "🎯 OPPORTUNITY BOARD"])
-
-# === TAB 1: TEASER OPTIMIZER ===
-with t1:
-    if league_select == "NFL" and not market_df.empty:
-        # 1. IDENTIFY CANDIDATES (Wong Logic)
-        candidates = []
-        for i, row in market_df.iterrows():
-            line = row.get('Spread', 0.0) 
-            if line == 0.0: continue
-            
-            side = "Favorite (-)" if line < 0 else "Underdog (+)"
-            # Tease 6 points
-            teased_line = line + 6.0 if line < 0 else line + 6.0
-            
-            # Wong Criteria Check
-            is_wong = False
-            if side == "Favorite (-)" and -8.5 <= line <= -7.5: is_wong = True # Crosses -7, -3
-            if side == "Underdog (+)" and 1.5 <= line <= 2.5: is_wong = True # Crosses +3, +7
-            
-            if is_wong:
-                candidates.append({
-                    "Team": row['Team'],
-                    "Line": line,
-                    "Teased": teased_line,
-                    "Matchup": row['Matchup']
-                })
-        
-        if len(candidates) < 2:
-            st.warning(f"Found {len(candidates)} Wong Candidates. Need at least 2 to build parlays.")
-            if candidates: st.write(candidates)
+    def convert_american_to_decimal(self, odds):
+        if pd.isna(odds) or odds == 0: return 0.0
+        if odds > 0:
+            return 1 + (odds / 100)
         else:
-            # 2. GENERATE COMBOS (Top 15)
-            st.markdown(f"<div class='crusher-header'>TOP 15 TEASER COMBINATIONS ({len(candidates)} TEAMS FOUND)</div>", unsafe_allow_html=True)
-            
-            # Generate 2-Team and 3-Team Combos
-            combos_2 = list(itertools.combinations(candidates, 2))
-            combos_3 = list(itertools.combinations(candidates, 3))
-            all_combos = combos_2 + combos_3
-            
-            # Limit to 15 for display
-            top_15 = all_combos[:15]
-            
-            for idx, combo in enumerate(top_15):
-                # Calculate metrics (Simplified for MVP)
-                num_legs = len(combo)
-                # Standard Teaser Odds: 2-Team (-120), 3-Team (+160)
-                odds_str = "-120" if num_legs == 2 else "+160" 
-                payout_mult = 1.83 if num_legs == 2 else 2.6
-                
-                profit = (unit_size * payout_mult) - unit_size
-                conf_pct = 75 - (idx * 2) # Mock confidence for display sort
-                
-                # Build Team List HTML
-                legs_html = ""
-                for leg in combo:
-                    legs_html += f"""
-                    <div style='display:flex; justify-content:space-between; margin-bottom:5px; border-bottom:1px solid #333; padding-bottom:5px;'>
-                        <span style='color:white; font-weight:bold;'>{leg['Team']}</span>
-                        <span style='color:#00ccff;'>{leg['Line']} ➔ {leg['Teased']}</span>
-                    </div>
-                    """
-                
-                # RENDER CARD
-                st.markdown(f"""
-                <div class='crusher-card'>
-                    <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;'>
-                        <span style='color:#cc0000; font-weight:bold; font-size:1.2em;'>COMBO #{idx+1} ({num_legs}-LEG)</span>
-                        <div class='bet-btn'>{odds_str}</div>
-                    </div>
-                    
-                    {legs_html}
-                    
-                    <div style='display:flex; justify-content:space-between; margin-top:15px;'>
-                        <div class='stat-box' style='width:30%;'>
-                            <div class='stat-label'>RISK</div>
-                            <div class='stat-value'>${unit_size:.0f}</div>
-                        </div>
-                        <div class='stat-box' style='width:30%;'>
-                            <div class='stat-label'>PROFIT</div>
-                            <div class='stat-value'>${profit:.2f}</div>
-                        </div>
-                        <div class='stat-box' style='width:30%;'>
-                            <div class='stat-label'>CONFIDENCE</div>
-                            <div class='stat-value'>{conf_pct}%</div>
-                        </div>
-                    </div>
-                    
-                    <div class='conf-bar-bg'>
-                        <div class='conf-bar-fill' style='width: {conf_pct}%;'></div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            return 1 + (100 / abs(odds))
 
-    else:
-        st.info("Please Select NFL and Scan Market.")
+    def convert_decimal_to_american(self, decimal_odds):
+        if decimal_odds <= 1: return -10000
+        if decimal_odds >= 2.00:
+            return round((decimal_odds - 1) * 100)
+        else:
+            return round(-100 / (decimal_odds - 1))
 
-# === TAB 2: OPPORTUNITY BOARD (Standard) ===
-with t2:
-    if not market_df.empty:
-        # Simple display for context
-        st.dataframe(market_df)
-    else:
-        st.info("Scan Market first.")
+    def get_implied_prob(self, odds):
+        if pd.isna(odds) or odds == 0: return 0.0
+        if odds > 0:
+            return 100 / (odds + 100)
+        else:
+            return abs(odds) / (abs(odds) + 100)
+
+    def calculate_vig_free_prob(self, odds):
+        return self.get_implied_prob(odds)
+
+    def calculate_parlay_math(self, selected_bets):
+        if not selected_bets: return 0, 0, 0
+        total_decimal = 1.0
+        combined_prob = 1.0
+        
+        for bet in selected_bets:
+            dec = self.convert_american_to_decimal(bet['odds'])
+            total_decimal *= dec
+            combined_prob *= bet['prob']
+            
+        final_american = self.convert_decimal_to_american(total_decimal)
+        return final_american, total_decimal, combined_prob
+
+    def kelly_criterion(self, true_prob, hero_odds, fractional_kelly=0.5):
+        if hero_odds == 0: return 0
+        if hero_odds > 0:
+            b = hero_odds / 100
+        else:
+            b = 100 / abs(hero_odds)
+        
+        p = true_prob
+        q = 1 - p
+        
+        if b == 0: return 0
+        f_star = ((b * p) - q) / b
+        return max(0.0, round(f_star * fractional_kelly * 100, 2))
+
+    # --- NEW: SHARP SHOOTER LOGIC ---
+    def analyze_sharp_signal(self, hero_odds, sharp_odds, kelly_edge):
+        # 1. TRAP DETECTION (Negative EV on a Favorite)
+        if kelly_edge <= 0 and (hero_odds < -150):
+            return "TRAP", "#FF0044", "TRAP DETECTED: EXPENSIVE FAVORITE"
+        
+        # 2. GREENLIGHT (Significant Edge vs Sharp)
+        # If Hero gives better odds than Sharp by a margin
+        hero_prob = self.get_implied_prob(hero_odds)
+        sharp_prob = self.get_implied_prob(sharp_odds)
+        
+        if kelly_edge > 1.5:
+            return "GREENLIGHT", "#39FF14", "SHARP APPROVED: HIGH VALUE"
+            
+        if kelly_edge > 0:
+            return "PLAYABLE", "#00E5FF", "POSITIVE EV"
+
+        return "NO_PLAY", "#555", "NO EDGE"
+
+    def validate_teaser(self, line, teaser_points, side):
+        if "Fav" in side or "-" in side:
+            spread = -abs(line) 
+            if -8.9 <= spread <= -7.1:
+                return "GOLD: ELITE VALUE", True, f"Perfect. Crosses 3 & 7."
+            if -9.5 <= spread <= -6.0:
+                 return "SILVER: SOLID VALUE", True, f"Good Play."
+
+        if "Dog" in side or "+" in side:
+            spread = abs(line)
+            if 1.1 <= spread <= 2.9:
+                return "GOLD: ELITE VALUE", True, f"Perfect. Crosses 3 & 7."
+            if 0.5 <= spread <= 3.5:
+                 return "SILVER: SOLID VALUE", True, f"Good Play."
+
+        return "NO EDGE", False, "No key numbers."
